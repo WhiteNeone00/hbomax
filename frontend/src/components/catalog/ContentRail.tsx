@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ContentRow, MediaItem } from '../../types/media'
 import { MediaCard } from './MediaCard'
@@ -9,10 +9,12 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
   onToggleSave: (item: MediaItem) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
-  const isFeatured = row.id === 'trending'
-  const hideTitle = ['series', 'movies', 'saved-titles'].includes(row.id)
+  const isFeatured = row.id === 'trending' || row.id === 'live-upcoming' || row.id === 'continue-watching'
+  const isLiveUpcoming = row.id === 'live-upcoming'
+  const hideTitle = ['series', 'movies', 'saved-titles', 'continue-watching'].includes(row.id)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
 
   useEffect(() => {
     const rail = railRef.current
@@ -35,24 +37,44 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
   }, [row.items.length])
 
   function scroll(direction: number) {
-    const distance = isFeatured && railRef.current
-      ? Math.round(railRef.current.clientWidth * 0.86)
-      : 620
-    railRef.current?.scrollBy({ left: direction * distance, behavior: 'smooth' })
+    const rail = railRef.current
+    if (!rail) return
+    
+    // Scroll by one item width plus gap, so we see half of the next/previous item
+    const itemWidth = isLiveUpcoming ? 258 : 220 // live-upcoming: 258px, featured: 220px
+    const gap = 16
+    const distance = itemWidth + gap
+    rail.scrollBy({ left: direction * distance, behavior: 'smooth' })
   }
 
+  const showArrows = isFeatured && (isHovered || canScrollLeft || canScrollRight)
+
   return (
-    <section className={`content-section${isFeatured ? ' featured-rail-section' : ''}${hideTitle ? ' is-untitled' : ''}`} aria-label={row.title}>
+    <section 
+      className={`content-section${isFeatured ? ' featured-rail-section' : ''}${hideTitle ? ' is-untitled' : ''}`} 
+      aria-label={row.title}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       <div className="section-heading">
         {!hideTitle && <div><h2>{row.title}</h2></div>}
-        {!isFeatured && <div className="rail-controls"><button aria-label={`Scroll ${row.title} left`} onClick={() => scroll(-1)}><ArrowLeft size={17} /></button><button aria-label={`Scroll ${row.title} right`} onClick={() => scroll(1)}><ArrowRight size={17} /></button></div>}
       </div>
-      <div className={`content-rail${isFeatured ? ' is-featured-rail' : ''}`} ref={railRef}>
-        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showMetadata={row.id !== 'trending'} showKijkwijzer={row.id !== 'trending'} featured={isFeatured} />)}
+      <div className={`content-rail${isFeatured ? ' is-featured-rail' : ''}${row.id === 'live-upcoming' ? ' is-live-upcoming-rail' : ''}`} ref={railRef}>
+        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showMetadata={false} showKijkwijzer={row.id !== 'trending' && row.id !== 'live-upcoming'} featured={isFeatured} isLiveUpcoming={row.id === 'live-upcoming'} isContinueWatching={row.id === 'continue-watching'} />)}
+        {isLiveUpcoming && (
+          <a 
+            href="/live-sports-schedule" 
+            className="full-schedule-link"
+            aria-label="Go to Full Schedule"
+          >
+            <span className="full-schedule-text">Go to Full Schedule</span>
+            <ArrowRight size={20} strokeWidth={2} />
+          </a>
+        )}
       </div>
-      {isFeatured && <>
-        <button className="featured-rail-arrow is-previous" disabled={!canScrollLeft} aria-label="Previous titles in Featured" data-position="back" onClick={() => scroll(-1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronLeft size={48} strokeWidth={1.8} /></button>
-        <button className="featured-rail-arrow is-next" disabled={!canScrollRight} aria-label="More titles in Featured" data-position="forward" onClick={() => scroll(1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronRight size={48} strokeWidth={1.8} /></button>
+      {isFeatured && showArrows && <>
+        <button className="featured-rail-arrow is-previous" disabled={!canScrollLeft} aria-label={`Previous titles in ${row.title}`} data-position="back" onClick={() => scroll(-1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronLeft size={40} strokeWidth={1.8} /></button>
+        <button className="featured-rail-arrow is-next" disabled={!canScrollRight} aria-label={`More titles in ${row.title}`} data-position="forward" onClick={() => scroll(1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronRight size={40} strokeWidth={1.8} /></button>
       </>}
     </section>
   )

@@ -369,10 +369,12 @@ app.get('/api/kijkwijzer', async (request, response) => {
 
 app.get('/api/home', async (_request, response) => {
   try {
-    const [trending, recommended, referenceDetails] = await Promise.all([
+    const [trending, recommended, referenceDetails, liveUpcoming] = await Promise.all([
       tmdbFirstThirty('trending/all/week?language=en-US'),
       tmdbFirstThirty('tv/337700/recommendations?language=en-US'),
       tmdb<TmdbDetails>('tv/337700?append_to_response=content_ratings,images&include_image_language=en,null'),
+      // Fetch sports content from TMDB - using keywords for sports
+      tmdbFirstThirty('discover/tv?with_keywords=210024|210025|32292|32293&language=en-US&sort_by=first_air_date.desc&include_null_first_air_dates=false'),
     ])
 
     const trendingItems = trending.map((item) => ({
@@ -383,16 +385,200 @@ app.get('/api/home', async (_request, response) => {
     }))
     const featured = await enrichFeatured({ ...referenceDetails, media_type: 'tv' })
     const featuredRailItems = [featured, ...trendingItems.filter((item) => item.id !== featured.id)].slice(0, 30)
-    const heroCandidates = pickRandomItems(featuredRailItems.filter((item) => item.backdrop_path && item.overview), 5)
+    const heroCandidates = pickRandomItems(featuredRailItems.filter((item) => item.backdrop_path && item.overview), 6)
     const heroItems = await Promise.all(heroCandidates.map((item) => item.id === featured.id ? featured : enrichFeatured(item)))
     const enrichedHeroItems = new Map(heroItems.map((item) => [item.id, item]))
     const featuredRailWithHeroDetails = featuredRailItems.map((item) => enrichedHeroItems.get(item.id) ?? item)
+
+    // Process live/upcoming sports items from TMDB
+    const now = new Date()
+    const liveUpcomingItems = await Promise.all(
+      liveUpcoming.slice(0, 10).map(async (item) => {
+        const withKijkwijzer = withVerifiedKijkwijzer(item, 'tv')
+        try {
+          // Fetch TV show details to get next_episode_to_air
+          const details = await tmdb<TmdbDetails>(`tv/${item.id}?append_to_response=seasons,content_ratings&include_image_language=en,null`)
+          const nextEpisode = details.next_episode_to_air
+          // Determine sport type from genres or keywords
+          const sportType = determineSportType(details)
+          // Format live time from next episode air date
+          const liveTime = nextEpisode?.air_date 
+            ? formatLiveTime(new Date(`${nextEpisode.air_date}T12:00:00Z`))
+            : undefined
+          // Clean overview - remove "Men | " or "Women | " prefixes
+          let overview = details.overview || item.overview || ''
+          overview = overview.replace(/^(Men|Women)\s*\|\s*/i, '')
+          return {
+            ...withKijkwijzer,
+            next_episode_to_air: nextEpisode,
+            seasons: details.seasons,
+            sport_type: sportType,
+            live_time: liveTime,
+            overview: overview,
+          }
+        } catch {
+          return withKijkwijzer
+        }
+      })
+    )
+
+    // Filter out items without sport type or live time from TMDB results
+    const filteredLiveUpcoming = liveUpcomingItems.filter(item => item.sport_type && item.live_time)
+
+    // Fallback mock data for sports that might not be in TMDB
+    // Using real TMDB poster paths from trending items so images load correctly
+    const trendingPosters = trendingItems.map(item => item.poster_path).filter(Boolean)
+    const fallbackPosters = trendingPosters.length > 0 ? trendingPosters : ['/2QVTk55dw9tMUHDlG4027cOTNOv.jpg', '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg', '/zPHfsaiMZT1HNz1ZS55iyLKZkFG.jpg']
+
+    const fallbackSports = [
+      {
+        id: 999005,
+        name: 'Men\'s and Women\'s Lead | Final',
+        overview: 'World Climbing Para Series | Gunsan',
+        poster_path: fallbackPosters[0] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['KR'],
+        original_language: 'en',
+        original_name: 'Men\'s and Women\'s Lead | Final',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Climbing',
+        live_time: 'Fri, 7:00 AM',
+      },
+      {
+        id: 999006,
+        name: 'Czech Republic - Germany',
+        overview: 'Round Robin | European Championship',
+        poster_path: fallbackPosters[1] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['EU'],
+        original_language: 'en',
+        original_name: 'Czech Republic - Germany',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Curling',
+        live_time: 'Fri, 9:30 AM',
+      },
+      {
+        id: 999007,
+        name: 'Czech Republic - Sweden',
+        overview: 'Round Robin | European Championship',
+        poster_path: fallbackPosters[2] || '/zPHfsaiMZT1HNz1ZS55iyLKZkFG.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['EU'],
+        original_language: 'en',
+        original_name: 'Czech Republic - Sweden',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Curling',
+        live_time: 'Fri, 2:00 PM',
+      },
+      {
+        id: 999008,
+        name: 'Simmons Bank Championship | Day 1',
+        overview: 'PGA Tour Champions',
+        poster_path: fallbackPosters[3 % fallbackPosters.length] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['US'],
+        original_language: 'en',
+        original_name: 'Simmons Bank Championship | Day 1',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Golf',
+        live_time: 'Fri, 6:00 PM',
+      },
+      {
+        id: 999009,
+        name: 'Italy - Germany',
+        overview: 'Round Robin | European Championship',
+        poster_path: fallbackPosters[4 % fallbackPosters.length] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['EU'],
+        original_language: 'en',
+        original_name: 'Italy - Germany',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Curling',
+        live_time: 'Fri, 6:30 PM',
+      },
+      {
+        id: 999010,
+        name: 'Mexico Open | Day 2',
+        overview: 'PGA Tour',
+        poster_path: fallbackPosters[5 % fallbackPosters.length] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv',
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['US'],
+        original_language: 'en',
+        original_name: 'Mexico Open | Day 2',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 2,
+          season_number: 1,
+        },
+        sport_type: 'Golf',
+        live_time: 'Fri, 9:00 PM',
+      },
+    ].map(item => ({
+      ...withVerifiedKijkwijzer(item, 'tv'),
+      next_episode_to_air: item.next_episode_to_air,
+      sport_type: item.sport_type,
+      live_time: item.live_time,
+    }))
+
+    // Combine TMDB results with fallback sports
+    const allLiveUpcoming = [...filteredLiveUpcoming, ...fallbackSports]
 
     response.json({
       featured: heroItems[0] ?? featured,
       hero_items: heroItems,
       rows: [
         { id: 'trending', title: 'Featured', items: featuredRailWithHeroDetails },
+        { id: 'live-upcoming', title: 'Live & Upcoming', items: allLiveUpcoming },
         { id: 'recommended', title: 'Recommended for You', items: recommended.map((item) => withVerifiedKijkwijzer(item, 'tv')) },
       ],
     })
@@ -400,6 +586,64 @@ app.get('/api/home', async (_request, response) => {
     handleApiError(error, response)
   }
 })
+
+// Helper function to determine sport type from TMDB data
+function determineSportType(details: TmdbDetails): string | undefined {
+  const genreNames = details.genres?.map(g => g.name.toLowerCase()) ?? []
+  const keywordNames = details.keywords?.results?.map(k => k.name.toLowerCase()) ?? []
+  
+  // Check genres first
+  if (genreNames.some(g => g.includes('sport'))) {
+    if (genreNames.some(g => g.includes('golf'))) return 'Golf'
+    if (genreNames.some(g => g.includes('curling'))) return 'Curling'
+    if (genreNames.some(g => g.includes('basketball'))) return 'Basketball'
+    if (genreNames.some(g => g.includes('football') || g.includes('soccer'))) return 'Football'
+    if (genreNames.some(g => g.includes('tennis'))) return 'Tennis'
+    if (genreNames.some(g => g.includes('baseball'))) return 'Baseball'
+    if (genreNames.some(g => g.includes('hockey'))) return 'Hockey'
+    if (genreNames.some(g => g.includes('racing') || g.includes('motor'))) return 'Racing'
+    if (genreNames.some(g => g.includes('climbing'))) return 'Climbing'
+    if (genreNames.some(g => g.includes('wrestling'))) return 'Wrestling'
+    if (genreNames.some(g => g.includes('boxing'))) return 'Boxing'
+    if (genreNames.some(g => g.includes('mixed martial') || g.includes('mma'))) return 'MMA'
+    return 'Sports'
+  }
+  
+  // Check keywords
+  if (keywordNames.some(k => k.includes('golf'))) return 'Golf'
+  if (keywordNames.some(k => k.includes('curling'))) return 'Curling'
+  if (keywordNames.some(k => k.includes('basketball'))) return 'Basketball'
+  if (keywordNames.some(k => k.includes('football') || k.includes('soccer'))) return 'Football'
+  if (keywordNames.some(k => k.includes('tennis'))) return 'Tennis'
+  if (keywordNames.some(k => k.includes('baseball'))) return 'Baseball'
+  if (keywordNames.some(k => k.includes('hockey'))) return 'Hockey'
+  if (keywordNames.some(k => k.includes('racing') || k.includes('motor'))) return 'Racing'
+  if (keywordNames.some(k => k.includes('climbing'))) return 'Climbing'
+  if (keywordNames.some(k => k.includes('wrestling'))) return 'Wrestling'
+  if (keywordNames.some(k => k.includes('boxing'))) return 'Boxing'
+  if (keywordNames.some(k => k.includes('mixed martial') || k.includes('mma'))) return 'MMA'
+  if (keywordNames.some(k => k.includes('sport'))) return 'Sports'
+  
+  return undefined
+}
+
+// Helper function to format live time from date
+function formatLiveTime(date: Date): string {
+  const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(date)
+  const time = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' }).format(date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  
+  if (date.toDateString() === today.toDateString()) {
+    return `Today, ${time}`
+  } else if (date.toDateString() === tomorrow.toDateString()) {
+    return `Tomorrow, ${time}`
+  } else {
+    return `${day}, ${time}`
+  }
+}
 
 app.get('/api/search', async (request, response) => {
   const query = String(request.query.q ?? '').trim()
@@ -417,6 +661,66 @@ app.get('/api/search', async (request, response) => {
   } catch (error) {
     handleApiError(error, response)
   }
+})
+
+// Image proxy endpoint to bypass CORS/ORB restrictions
+app.get('/api/image-proxy', async (request, response) => {
+  const url = request.query.url as string
+  const size = request.query.size as string || 'w500'
+  
+  if (!url) {
+    response.status(400).json({ error: 'Missing url parameter' })
+    return
+  }
+
+  // Validate URL is from TMDB
+  if (!url.includes('image.tmdb.org') && !url.startsWith('/')) {
+    response.status(400).json({ error: 'Invalid image URL' })
+    return
+  }
+
+  try {
+    // Construct full TMDB image URL if path only
+    const imageUrl = url.startsWith('http') ? url : `https://image.tmdb.org/t/p/${size}${url}`
+    
+    const imageResponse = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; HBO-Max-Clone/1.0)',
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!imageResponse.ok) {
+      response.status(imageResponse.status).json({ error: 'Failed to fetch image' })
+      return
+    }
+
+    const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'
+    const arrayBuffer = await imageResponse.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    // Set CORS headers
+    response.setHeader('Access-Control-Allow-Origin', '*')
+    response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    response.setHeader('Content-Type', contentType)
+    response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    response.setHeader('Content-Length', buffer.length.toString())
+
+    response.send(buffer)
+  } catch (error) {
+    console.error('Image proxy error:', error)
+    response.status(500).json({ error: 'Failed to proxy image' })
+  }
+})
+
+// Handle OPTIONS for CORS preflight
+app.options('/api/image-proxy', (request, response) => {
+  response.setHeader('Access-Control-Allow-Origin', '*')
+  response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  response.sendStatus(204)
 })
 
 app.listen(port, '0.0.0.0', () => {

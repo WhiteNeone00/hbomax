@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Check, Play, Plus, X } from 'lucide-react'
+import { Check, Play, Plus, X, Search, Heart } from 'lucide-react'
 import { MediaCard } from '../../components/catalog/MediaCard'
 import { ContentRail } from '../../components/catalog/ContentRail'
 import { KijkwijzerBadges } from '../../components/catalog/KijkwijzerBadge'
-import { getPoster, getTitle } from '../../components/catalog/media-utils'
+import { getPoster, getTitle, getBackdrop, getLogo } from '../../components/catalog/media-utils'
 import { NavigationBar } from '../../components/navigation/NavigationBar'
 import { BrandLogo } from '../../components/navigation/BrandLogo'
 import { fetchHome, fetchKijkwijzer, searchTitles } from '../../services/tmdb'
@@ -107,8 +107,8 @@ export default function HomePage() {
   const featuredItems = home?.hero_items ?? (home?.featured ? [home.featured] : [])
   const savedIds = new Set(savedItems.map((item) => item.id))
   const featured = featuredItems[featuredIndex] ?? home?.featured
-  const heroImage = getPoster(featured?.backdrop_path, 'original')
-  const heroLogo = getPoster(featured?.logo_path)
+  const heroImage = getBackdrop(featured?.backdrop_path, 'original')
+  const heroLogo = getLogo(featured?.logo_path)
   const isFeaturedSaved = featured ? savedIds.has(featured.id) : false
   const featuredEpisode = featured ? nextEpisode(featured, watchProgress) : null
   const featuredWatchLabel = featured?.media_type === 'tv'
@@ -119,6 +119,33 @@ export default function HomePage() {
     ? "A serial killer's ex-wife and his final victim who escaped team up to investigate murders that may reveal the full extent of the killer's crimes."
     : featured?.overview || 'The ones you love, the ones you have not found yet, and everything worth sharing.'
   const rows = home?.rows ?? []
+
+  // Build Continue Watching row from watch progress
+  const continueWatchingItems: MediaItem[] = []
+  if (watchProgress && Object.keys(watchProgress).length > 0) {
+    // Get all items from home data (featured + rows) to find the ones with watch progress
+    const allItems = [
+      ...featuredItems,
+      ...rows.flatMap(row => row.items)
+    ]
+    const itemMap = new Map(allItems.map(item => [String(item.id), item]))
+    
+    for (const [itemId, progress] of Object.entries(watchProgress)) {
+      const item = itemMap.get(itemId)
+      if (item) {
+        continueWatchingItems.push({
+          ...item,
+          // Add progress info for display
+          watchProgress: progress
+        } as MediaItem & { watchProgress: any })
+      }
+    }
+  }
+
+  // Add Continue Watching row if there are items
+  const rowsWithContinueWatching = continueWatchingItems.length > 0
+    ? [{ id: 'continue-watching', title: 'Continue Watching', items: continueWatchingItems }, ...rows]
+    : rows
 
   useEffect(() => {
     if (!featured || featured.content_rating || featured.content_rating_descriptors?.length) return
@@ -156,9 +183,10 @@ export default function HomePage() {
         {heroImage && <div key={featured?.id} className={`hero-backdrop is-${heroDirection}`} style={{ backgroundImage: `url(${heroImage})` }} aria-hidden="true" />}
         {heroImage && <div className="hero-image-protection" aria-hidden="true" />}
         <div className="hero-grain" />
+        
         <div key={featured?.id} className={`hero-content is-${heroDirection}`}>
           <div className="hero-title-area">
-            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} /> : <h1>{featured ? getTitle(featured) : 'Stories that stay with you.'}</h1>}
+            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} loading="eager" fetchpriority="high" /> : <h1>{featured ? getTitle(featured) : 'Stories that stay with you.'}</h1>}
           </div>
           <p className={`hero-status${featured?.release_label ? '' : ' is-empty'}`} aria-hidden={!featured?.release_label}>{featured?.release_label ?? '\u00a0'}</p>
           <div className="hero-details">
@@ -176,7 +204,7 @@ export default function HomePage() {
           <button className="hero-previous" disabled={featuredIndex === 0} aria-label="Previous featured title" onClick={() => moveFeatured(-1)}><HeroArrowIcon direction="previous" /></button>
           <button className="hero-next" disabled={featuredIndex === featuredItems.length - 1} aria-label="Next featured title" onClick={() => moveFeatured(1)}><HeroArrowIcon direction="next" /></button>
         </>}
-        {featuredItems.length > 1 && <div className="hero-pagination" aria-label="Featured titles">{featuredItems.map((item, index) => <button key={item.id} className={index === featuredIndex ? 'is-active' : ''} aria-label={`Show ${getTitle(item)}`} aria-current={index === featuredIndex ? 'true' : undefined} onClick={() => selectFeatured(index)} />)}</div>}
+        {featuredItems.length > 1 && <div className="hero-pagination" aria-label="Featured titles">{featuredItems.slice(0, 6).map((item, index) => <button key={item.id} className={index === featuredIndex ? 'is-active' : ''} aria-label={`Show ${getTitle(item)}`} aria-current={index === featuredIndex ? 'true' : undefined} onClick={() => selectFeatured(index)} />)}</div>}
       </section>
 
       <main className="content-wrap" id="main-content">
@@ -190,8 +218,8 @@ export default function HomePage() {
           </section>
         ) : loading ? (
           <div className="loading-state"><span className="loading-orbit" /><span>Finding something good...</span></div>
-        ) : rows.length ? (
-          rows.map((row) => <div id={row.id} key={row.id}><ContentRail row={row} savedIds={savedIds} onToggleSave={toggleSaved} /></div>)
+        ) : rowsWithContinueWatching.length ? (
+          rowsWithContinueWatching.map((row) => <div id={row.id} key={row.id}><ContentRail row={row} savedIds={savedIds} onToggleSave={toggleSaved} /></div>)
         ) : (
           <section className="empty-shelves"><span className="section-kicker">THE GOOD STUFF IS CLOSE</span><h2>Your watchlist starts here.</h2><p>Add your TMDB read access token to <code>backend/.env</code> to bring titles, artwork, and search to life.</p></section>
         )}
