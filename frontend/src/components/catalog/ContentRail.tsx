@@ -9,7 +9,7 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
   onToggleSave: (item: MediaItem) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
-  const isFeatured = row.id === 'trending' || row.id === 'recommended' || row.id === 'live-upcoming' || row.id === 'continue-watching' || row.id === 'villains'
+  const isFeatured = row.id === 'trending' || row.id === 'recommended' || row.id === 'live-upcoming' || row.id === 'continue-watching' || row.id === 'villains' || row.id === 'trending-series' || row.id === 'comic-books' || row.id === 'family' || row.id === 'hbo-highlights'
   const isLiveUpcoming = row.id === 'live-upcoming'
   const isContinueWatching = row.id === 'continue-watching'
   const hideTitle = ['series', 'movies', 'saved-titles'].includes(row.id)
@@ -88,7 +88,7 @@ function scroll(direction: number) {
         {!hideTitle && <div><h2>{row.title}</h2></div>}
       </div>
       <div className={`content-rail${isFeatured ? ' is-featured-rail' : ''}${row.id === 'live-upcoming' ? ' is-live-upcoming-rail' : ''}${isContinueWatching ? ' is-continue-watching-rail' : ''}`} ref={railRef}>
-        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showKijkwijzer={row.id !== 'trending' && row.id !== 'recommended' && row.id !== 'live-upcoming' && row.id !== 'villains'} featured={isFeatured} isLiveUpcoming={row.id === 'live-upcoming'} isContinueWatching={row.id === 'continue-watching'} />)}
+        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showKijkwijzer={row.id !== 'trending' && row.id !== 'recommended' && row.id !== 'live-upcoming' && row.id !== 'villains' && row.id !== 'trending-series' && row.id !== 'comic-books' && row.id !== 'family' && row.id !== 'hbo-highlights'} featured={isFeatured} isLiveUpcoming={row.id === 'live-upcoming'} isContinueWatching={row.id === 'continue-watching'} />)}
         {isLiveUpcoming && (
           <a 
             href="/live-sports-schedule" 

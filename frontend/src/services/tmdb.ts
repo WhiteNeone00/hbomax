@@ -1,13 +1,19 @@
 import type { HomeData, MediaItem } from '../types/media'
 
 async function apiRequest<T>(path: string): Promise<T> {
-  const response = await fetch(path)
-  if (!response.headers.get('content-type')?.includes('application/json')) {
-    throw new Error('The catalog server could not be reached. Start both packages with npm run dev.')
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000)
+  try {
+    const response = await fetch(path, { signal: controller.signal })
+    if (!response.headers.get('content-type')?.includes('application/json')) {
+      throw new Error('The catalog server could not be reached. Start both packages with npm run dev.')
+    }
+    const data = await response.json() as T & { error?: string }
+    if (!response.ok) throw new Error(data.error ?? 'The catalog is unavailable right now.')
+    return data
+  } finally {
+    clearTimeout(timeoutId)
   }
-  const data = await response.json() as T & { error?: string }
-  if (!response.ok) throw new Error(data.error ?? 'The catalog is unavailable right now.')
-  return data
 }
 
 export function fetchHome(watchProgress?: Record<string, any>) {

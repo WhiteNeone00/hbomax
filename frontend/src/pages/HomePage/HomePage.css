@@ -24,7 +24,7 @@
 .nav-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #fff; background: transparent; font-size: 12px; }
 .nav-search input::placeholder { color: #a9aaad; }
 .clear-search { display: grid; place-items: center; border: 0; padding: 2px; color: #d9d9d9; background: none; cursor: pointer; }
-.profile-control { width: 32px; height: 32px; position: relative; margin-left: 10px; }
+.profile-control { width: 32px; height: 32px; position: relative; margin-left: 06px; }
 .profile-button { width: 32px; height: 32px; position: relative; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #101116; background: rgba(255,255,255,0.15); cursor: pointer; transition: background 0.2s; }
 .profile-button:hover { background: rgba(255,255,255,0.25); }
 .profile-avatar { width: 32px; height: 32px; display: block; border-radius: 50%; object-fit: cover; }
@@ -161,12 +161,16 @@
 @media (max-width: 375px) { .hero-previous, .hero-next { width: 40px; } .hero-arrow-icon { width: 20px; height: 20px; } }
 .content-wrap { max-width: 1560px; margin: 0 auto; padding: 0 var(--content-gutter); }
 
-/* Featured rails (trending, recommended, live-upcoming, continue-watching, villains) align with navbar left edge (hamburger menu) and extend to right edge */
+/* Featured rails (trending, recommended, live-upcoming, continue-watching, villains, trending-series, comic-books, family, hbo-highlights) align with navbar left edge (hamburger menu) and extend to right edge */
 .content-wrap > #trending,
 .content-wrap > #recommended,
 .content-wrap > #live-upcoming,
 .content-wrap > #continue-watching,
-.content-wrap > #villains {
+.content-wrap > #villains,
+.content-wrap > #trending-series,
+.content-wrap > #comic-books,
+.content-wrap > #family,
+.content-wrap > #hbo-highlights {
   position: relative;
   z-index: 4;
   width: 100vw;
@@ -181,7 +185,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains { margin-top: 48px; } 
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights { margin-top: 48px; } 
 }
 .content-section { padding-top: 16px; margin: 0 0 46px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 20px; }
@@ -435,7 +443,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2) + 10px);
     padding-left: var(--content-gutter);
@@ -455,7 +467,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
@@ -478,7 +494,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
@@ -501,7 +521,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
@@ -520,7 +544,7 @@
   .hero-content { width: 100%; left: 0; bottom: 28px; display: flex; align-items: center; flex-direction: column; text-align: center; }
   .hero-title-area { width: 100%; justify-content: center; }
   .hero-title-logo { width: min(390px, 90vw); max-height: 120px; object-position: center bottom; }
-  .hero-details { justify-content: center; flex-wrap: wrap; }
+  .hero-details { justify_content: center; flex-wrap: wrap; }
   .hero-description-slot { width: min(538px, calc(100vw - 40px)); }
   .hero-description { text-align: left; }
   .hero-actions { justify-content: center; }
@@ -531,7 +555,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
@@ -555,7 +583,11 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
@@ -616,11 +648,123 @@
   .content-wrap > #recommended,
   .content-wrap > #live-upcoming,
   .content-wrap > #continue-watching,
-  .content-wrap > #villains {
+  .content-wrap > #villains,
+  .content-wrap > #trending-series,
+  .content-wrap > #comic-books,
+  .content-wrap > #family,
+  .content-wrap > #hbo-highlights {
     width: 100vw;
     margin-left: calc(-1 * var(--content-gutter) - max(0px, (100vw - 1560px) / 2));
     padding-left: var(--content-gutter);
     padding-right: 0;
   }
 }
+
+/* ==========================================================================
+   HBO Max Style Loading Screen - Full Screen Black/Silver with Centered Icon
+   ========================================================================== */
+
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100%;
+  height: 100vh;
+  background: #080808;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.loading-screen-bg {
+  position: absolute;
+  inset: 0;
+  background: 
+    radial-gradient(ellipse 60% 60% at 50% 50%, rgba(255,255,255,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 80% 80% at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 80%),
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.01) 0%, transparent 100%);
+  pointer-events: none;
+  animation: bgPulse 4s ease-in-out infinite;
+}
+
+@keyframes bgPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.loading-screen-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loading-logo {
+  width: 120px;
+  height: 120px;
+  animation: loadingRotate 2s linear infinite;
+  filter: drop-shadow(0 0 24px rgba(255,255,255,0.15)) drop-shadow(0 0 48px rgba(255,255,255,0.08));
+}
+
+.loading-ring {
+  transform-origin: 60px 60px;
+  animation: loadingDash 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loadingDash {
+  0% {
+    stroke-dasharray: 1, 200;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 100, 200;
+    stroke-dashoffset: -50;
+  }
+  100% {
+    stroke-dasharray: 100, 200;
+    stroke-dashoffset: -150;
+  }
+}
+
+.loading-text {
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .loading-logo {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .loading-text {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 375px) {
+  .loading-logo {
+    width: 80px;
+    height: 80px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

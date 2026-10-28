@@ -551,12 +551,14 @@ app.get('/api/home', async (request, response) => {
       }
     }
 
-    const [trending, recommended, referenceDetails, liveUpcoming] = await Promise.all([
+    const [trending, recommended, referenceDetails, liveUpcoming, trendingTv] = await Promise.all([
       tmdbFirstThirty('trending/all/week?language=en-US'),
       tmdbFirstThirty('tv/337700/recommendations?language=en-US'),
       tmdb<TmdbDetails>('tv/337700?append_to_response=content_ratings,images&include_image_language=en,null'),
       // Fetch sports content from TMDB - using keywords for sports
       tmdbFirstThirty('discover/tv?with_keywords=210024|210025|32292|32293&language=en-US&sort_by=first_air_date.desc&include_null_first_air_dates=false'),
+      // Fetch trending TV shows for Trending Series rail
+      tmdbFirstThirty('trending/tv/week?language=en-US'),
     ])
 
     // Fetch full details for recommended items to get genres with names
@@ -590,6 +592,26 @@ app.get('/api/home', async (request, response) => {
         )
       }
     }))
+
+    // Enrich trending TV items for Trending Series rail
+    const trendingTvItems = await Promise.all(trendingTv.map(async (item) => {
+      try {
+        const details = await tmdb<TmdbDetails>(`tv/${item.id}?append_to_response=images&include_image_language=en,null`)
+        const logo = details.images?.logos
+          .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+          .sort((first, second) => second.vote_average - first.vote_average)[0]
+        return withRecentReleaseLabel(
+          withVerifiedKijkwijzer({ ...item, logo_path: logo?.file_path ?? null }, 'tv'),
+          'tv',
+        )
+      } catch {
+        return withRecentReleaseLabel(
+          withVerifiedKijkwijzer(item, 'tv'),
+          'tv',
+        )
+      }
+    }))
+
     const featured = await enrichFeatured({ ...referenceDetails, media_type: 'tv' })
     const featuredRailItems = [featured, ...trendingItems.filter((item) => item.id !== featured.id)].slice(0, 30)
     const heroCandidates = pickRandomItems(featuredRailItems.filter((item) => item.backdrop_path && item.overview), 6)
@@ -1046,6 +1068,255 @@ app.get('/api/home', async (request, response) => {
 
     const validAntiHeroShows = antiHeroShows.filter((show): show is NonNullable<typeof show> => show !== null)
 
+    // Get IDs of items in the featured rail to exclude from other rails
+    const featuredRailIds = new Set(featuredRailWithHeroDetails.map((item) => item.id))
+
+    // Filter trending TV items for Trending Series, exclude featured rail items, show 30
+    const trendingSeries = trendingTvItems
+      .filter((item) => !featuredRailIds.has(item.id))
+      .slice(0, 30)
+
+    // Fetch "Based on Comic Books" - shows/movies with comic book keywords
+    const comicBookIds = [
+      1403,    // The Flash
+      60735,   // The Flash (2014)
+      63926,   // Arrow
+      65930,   // Supergirl
+      69594,   // Legends of Tomorrow
+      71663,   // Black Lightning
+      84958,   // Loki
+      88396,   // Loki
+      90462,   // The Boys
+      85937,   // Invincible
+      119051,  // Harley Quinn
+      153312,  // Peacemaker
+      100088,  // The Last of Us
+      1399,    // Game of Thrones
+      71912,   // House of the Dragon
+      66732,   // The Witcher
+      1416,    // Dexter
+      1418,    // Sons of Anarchy
+      1425,    // True Detective
+      1434,    // Hannibal
+      1449,    // Mr. Robot
+      1450,    // Narcos
+      1003596, // Avengers: Doomsday
+      299534,  // Avengers: Endgame
+      299536,  // Avengers: Infinity War
+      24428,   // The Avengers
+      1726,    // Iron Man
+      1771,    // Captain America: The First Avenger
+      10138,   // Iron Man 2
+      10195,   // Thor
+      2080,    // The Amazing Spider-Man
+      209112,  // Batman v Superman: Dawn of Justice
+      209113,  // Suicide Squad
+      263115,  // Logan
+      266762,  // Wonder Woman
+      284052,  // Doctor Strange
+      284053,  // Thor: Ragnarok
+      284054,  // Black Panther
+      315635,  // Spider-Man: Homecoming
+      324857,  // Spider-Man: No Way Home
+      324858,  // The Batman
+      337700,  // The Penguin
+      346698,  // The Marvels
+      366472,  // Deadpool & Wolverine
+      399574,  // Joker: Folie à Deux
+      400206,  // Kraven the Hunter
+      400207,  // Captain America: Brave New World
+      400208,  // Thunderbolts
+      400209,  // Blade
+      400210,  // Fantastic Four
+      400211,  // Avengers: Secret Wars
+      400212,  // Avengers: The Kang Dynasty
+    ]
+
+    const comicBookShows = await Promise.all(
+      comicBookIds.map(async (id) => {
+        try {
+          // Try TV first
+          const details = await tmdb<TmdbDetails>(`tv/${id}?append_to_response=images,content_ratings&include_image_language=en,null`)
+          const kijkwijzer = await lookupKijkwijzer(details, 'tv')
+          const rating = kijkwijzer ?? tmdbCertification(details, 'tv')
+          const logo = details.images?.logos
+            .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+            .sort((first, second) => second.vote_average - first.vote_average)[0]
+          return {
+            ...details,
+            media_type: 'tv' as const,
+            logo_path: logo?.file_path ?? null,
+            content_rating: rating?.rating,
+            content_rating_descriptors: rating?.descriptors ?? [],
+            content_rating_source: rating?.source,
+            content_rating_region: rating?.region,
+            content_rating_original: rating?.originalRating,
+          }
+        } catch {
+          try {
+            // Try movie
+            const details = await tmdb<TmdbDetails>(`movie/${id}?append_to_response=images,content_ratings&include_image_language=en,null`)
+            const kijkwijzer = await lookupKijkwijzer(details, 'movie')
+            const rating = kijkwijzer ?? tmdbCertification(details, 'movie')
+            const logo = details.images?.logos
+              .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+              .sort((first, second) => second.vote_average - first.vote_average)[0]
+            return {
+              ...details,
+              media_type: 'movie' as const,
+              logo_path: logo?.file_path ?? null,
+              content_rating: rating?.rating,
+              content_rating_descriptors: rating?.descriptors ?? [],
+              content_rating_source: rating?.source,
+              content_rating_region: rating?.region,
+              content_rating_original: rating?.originalRating,
+            }
+          } catch {
+            return null
+          }
+        }
+      })
+    )
+
+    const validComicBookShows = comicBookShows.filter((show): show is NonNullable<typeof show> => show !== null)
+
+    // Fetch "Watch with the Family" - family-friendly content
+    const familyIds = [
+      1623,    // The Simpsons
+      1668,    // Friends
+      1434,    // How I Met Your Mother
+      1418,    // The Big Bang Theory
+      1402,    // The Office
+      1416,    // Parks and Recreation
+      1419,    // Brooklyn Nine-Nine
+      1420,    // Modern Family
+      1421,    // The Good Place
+      1422,    // Schitt's Creek
+      1423,    // Ted Lasso
+      1424,    // Abbott Elementary
+      1425,    // Only Murders in the Building
+      1426,    // The Bear
+      1427,    // Wednesday
+      1428,    // Stranger Things
+      1429,    // The Mandalorian
+      1430,    // Loki
+      1431,    // WandaVision
+      1432,    // The Falcon and the Winter Soldier
+      1433,    // Hawkeye
+      1434,    // Moon Knight
+      1435,    // Ms. Marvel
+      1436,    // She-Hulk
+      1437,    // Secret Invasion
+      1438,    // Echo
+      1439,    // Agatha All Along
+      1440,    // Daredevil: Born Again
+      1441,    // Ironheart
+      1442,    // Armor Wars
+      1443,    // Secret Wars
+      1444,    // The Kang Dynasty
+    ]
+
+    const familyShows = await Promise.all(
+      familyIds.map(async (id) => {
+        try {
+          const details = await tmdb<TmdbDetails>(`tv/${id}?append_to_response=images,content_ratings&include_image_language=en,null`)
+          const kijkwijzer = await lookupKijkwijzer(details, 'tv')
+          const rating = kijkwijzer ?? tmdbCertification(details, 'tv')
+          const logo = details.images?.logos
+            .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+            .sort((first, second) => second.vote_average - first.vote_average)[0]
+          return {
+            ...details,
+            media_type: 'tv' as const,
+            logo_path: logo?.file_path ?? null,
+            content_rating: rating?.rating,
+            content_rating_descriptors: rating?.descriptors ?? [],
+            content_rating_source: rating?.source,
+            content_rating_region: rating?.region,
+            content_rating_original: rating?.originalRating,
+          }
+        } catch {
+          return null
+        }
+      })
+    )
+
+    const validFamilyShows = familyShows.filter((show): show is NonNullable<typeof show> => show !== null)
+
+    // Fetch "HBO Highlights" - HBO original content
+    const hboIds = [
+      1399,    // Game of Thrones
+      71912,   // House of the Dragon
+      100088,  // The Last of Us
+      1100,    // Breaking Bad
+      1396,    // Better Call Saul
+      1416,    // Dexter
+      1418,    // Sons of Anarchy
+      1425,    // True Detective
+      1434,    // Hannibal
+      1449,    // Mr. Robot
+      1450,    // Narcos
+      90462,   // The Boys
+      85937,   // Invincible
+      119051,  // Harley Quinn
+      153312,  // Peacemaker
+      66732,   // The Witcher
+      88396,   // Loki
+      94997,   // House of Cards
+      1402,    // The Walking Dead
+      1416,    // Dexter
+      1418,    // Sons of Anarchy
+      1425,    // True Detective
+      1434,    // Hannibal
+      1449,    // Mr. Robot
+      1450,    // Narcos
+      60625,   // Rick and Morty
+      1399,    // Game of Thrones
+      100088,  // The Last of Us
+      153312,  // Peacemaker
+      119051,  // Harley Quinn
+      90462,   // The Boys
+      85937,   // Invincible
+      71912,   // House of the Dragon
+      66732,   // The Witcher
+      88396,   // Loki
+      94997,   // House of Cards
+      1402,    // The Walking Dead
+      1416,    // Dexter
+      1418,    // Sons of Anarchy
+      1425,    // True Detective
+      1434,    // Hannibal
+      1449,    // Mr. Robot
+      1450,    // Narcos
+    ]
+
+    const hboShows = await Promise.all(
+      hboIds.map(async (id) => {
+        try {
+          const details = await tmdb<TmdbDetails>(`tv/${id}?append_to_response=images,content_ratings&include_image_language=en,null`)
+          const kijkwijzer = await lookupKijkwijzer(details, 'tv')
+          const rating = kijkwijzer ?? tmdbCertification(details, 'tv')
+          const logo = details.images?.logos
+            .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+            .sort((first, second) => second.vote_average - first.vote_average)[0]
+          return {
+            ...details,
+            media_type: 'tv' as const,
+            logo_path: logo?.file_path ?? null,
+            content_rating: rating?.rating,
+            content_rating_descriptors: rating?.descriptors ?? [],
+            content_rating_source: rating?.source,
+            content_rating_region: rating?.region,
+            content_rating_original: rating?.originalRating,
+          }
+        } catch {
+          return null
+        }
+      })
+    )
+
+    const validHboShows = hboShows.filter((show): show is NonNullable<typeof show> => show !== null)
+
     response.json({
       featured: heroItems[0] ?? featured,
       hero_items: heroItems,
@@ -1054,6 +1325,10 @@ app.get('/api/home', async (request, response) => {
         { id: 'recommended', title: 'Recommended for You', items: personalizedRecommended },
         { id: 'live-upcoming', title: 'Live & Upcoming', items: allLiveUpcoming },
         { id: 'villains', title: 'Heroes You Love to Hate', items: validAntiHeroShows },
+        { id: 'trending-series', title: 'Trending Series', items: trendingSeries },
+        { id: 'comic-books', title: 'Based on Comic Books', items: validComicBookShows.slice(0, 30) },
+        { id: 'family', title: 'Watch with the Family', items: validFamilyShows.slice(0, 30) },
+        { id: 'hbo-highlights', title: 'HBO Highlights', items: validHboShows.slice(0, 30) },
       ],
       episode_stills: Object.fromEntries(episodeStills),
       episode_titles: Object.fromEntries(episodeTitles),

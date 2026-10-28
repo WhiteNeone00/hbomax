@@ -20,6 +20,20 @@ function HeroArrowIcon({ direction }: { direction: 'previous' | 'next' }) {
   )
 }
 
+function LoadingScreen() {
+  return (
+    <div className="loading-screen" role="status" aria-label="Loading HBO Max">
+      <div className="loading-screen-bg" aria-hidden="true" />
+      <div className="loading-screen-inner">
+        <svg className="loading-logo" viewBox="0 0 120 120" aria-hidden="true">
+          <circle className="loading-ring" cx="60" cy="60" r="50" fill="none" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeDasharray="200" strokeDashoffset="0" />
+        </svg>
+        <div className="loading-text">Loading...</div>
+      </div>
+    </div>
+  )
+}
+
 export default function HomePage() {
   const [home, setHome] = useState<HomeData | null>(null)
   const [error, setError] = useState('')
@@ -42,6 +56,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setHome(null)
+    setError('')
     fetchHome(watchProgress)
       .then(setHome)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load titles right now.'))
@@ -117,7 +133,7 @@ export default function HomePage() {
   const heroGenres = featured?.genres?.slice(0, 1).map((genre) => genre.name === 'Documentary' ? 'Documentaries' : genre.name) ?? []
   const heroSynopsis = featured?.id === 337700
     ? "A serial killer's ex-wife and his final victim who escaped team up to investigate murders that may reveal the full extent of the killer's crimes."
-    : featured?.overview || 'The ones you love, the ones you have not found yet, and everything worth sharing.'
+    : featured?.overview || ''
   const rows = home?.rows ?? []
 
   // Build Continue Watching row from watch progress
@@ -203,7 +219,7 @@ export default function HomePage() {
         
         <div key={featured?.id} className={`hero-content is-${heroDirection}`}>
           <div className="hero-title-area">
-            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} loading="eager" fetchPriority="high" /> : <h1>{featured ? getTitle(featured) : 'Stories that stay with you.'}</h1>}
+            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} loading="eager" fetchPriority="high" /> : <h1>{featured ? getTitle(featured) : ''}</h1>}
           </div>
           <p className={`hero-status${featured?.release_label ? '' : ' is-empty'}`} aria-hidden={!featured?.release_label}>{featured?.release_label ?? '\u00a0'}</p>
           <div className="hero-details">
@@ -234,7 +250,7 @@ export default function HomePage() {
             {searchResults.length ? <div className="search-grid">{searchResults.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={toggleSaved} />)}</div> : !searchError && <p className="state-message">No matching titles. Try another search.</p>}
           </section>
         ) : loading ? (
-          <div className="loading-state"><span className="loading-orbit" /><span>Finding something good...</span></div>
+          <LoadingScreen />
         ) : rowsWithContinueWatching.length ? (
           rowsWithContinueWatching.map((row) => <div id={row.id} key={row.id}><ContentRail row={row} savedIds={savedIds} onToggleSave={toggleSaved} /></div>)
         ) : (
