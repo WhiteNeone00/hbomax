@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Check, Play, Plus, X, Search, Heart } from 'lucide-react'
+import { Check, Play, Plus, X } from 'lucide-react'
 import { MediaCard } from '../../components/catalog/MediaCard'
 import { ContentRail } from '../../components/catalog/ContentRail'
 import { KijkwijzerBadges } from '../../components/catalog/KijkwijzerBadge'
-import { getPoster, getTitle, getBackdrop, getLogo } from '../../components/catalog/media-utils'
+import { getTitle, getBackdrop, getLogo } from '../../components/catalog/media-utils'
 import { NavigationBar } from '../../components/navigation/NavigationBar'
 import { BrandLogo } from '../../components/navigation/BrandLogo'
 import { fetchHome, fetchKijkwijzer, searchTitles } from '../../services/tmdb'
@@ -42,11 +42,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchHome()
+    fetchHome(watchProgress)
       .then(setHome)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to load titles right now.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [watchProgress])
 
   useEffect(() => {
     localStorage.setItem('hbo-max-my-stuff', JSON.stringify(savedItems))
@@ -130,21 +130,38 @@ export default function HomePage() {
     ]
     const itemMap = new Map(allItems.map(item => [String(item.id), item]))
     
+    // Get episode stills and titles from backend response
+    const episodeStills = (home as any)?.episode_stills ?? {}
+    const episodeTitles = (home as any)?.episode_titles ?? {}
+    
     for (const [itemId, progress] of Object.entries(watchProgress)) {
       const item = itemMap.get(itemId)
       if (item) {
         continueWatchingItems.push({
           ...item,
           // Add progress info for display
-          watchProgress: progress
-        } as MediaItem & { watchProgress: any })
+          watchProgress: progress,
+          // Use episode still if available for Continue Watching
+          episode_still_path: episodeStills[itemId],
+          // Use episode title if available for Continue Watching
+          episode_title: episodeTitles[itemId]
+        } as MediaItem & { watchProgress: any; episode_still_path?: string; episode_title?: string })
       }
     }
   }
 
-  // Add Continue Watching row if there are items
+  // Add Continue Watching row after "Heroes You Love to Hate" (villains) if there are items
   const rowsWithContinueWatching = continueWatchingItems.length > 0
-    ? [{ id: 'continue-watching', title: 'Continue Watching', items: continueWatchingItems }, ...rows]
+    ? (() => {
+        const continueWatchingRow = { id: 'continue-watching', title: 'Continue Watching', items: continueWatchingItems }
+        const villainsIndex = rows.findIndex(row => row.id === 'villains')
+        if (villainsIndex >= 0) {
+          // Insert after villains row
+          return [...rows.slice(0, villainsIndex + 1), continueWatchingRow, ...rows.slice(villainsIndex + 1)]
+        }
+        // Fallback: prepend if villains row not found
+        return [continueWatchingRow, ...rows]
+      })()
     : rows
 
   useEffect(() => {
@@ -186,7 +203,7 @@ export default function HomePage() {
         
         <div key={featured?.id} className={`hero-content is-${heroDirection}`}>
           <div className="hero-title-area">
-            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} loading="eager" fetchpriority="high" /> : <h1>{featured ? getTitle(featured) : 'Stories that stay with you.'}</h1>}
+            {heroLogo ? <img className="hero-title-logo" src={heroLogo} alt={featured ? getTitle(featured) : ''} loading="eager" fetchPriority="high" /> : <h1>{featured ? getTitle(featured) : 'Stories that stay with you.'}</h1>}
           </div>
           <p className={`hero-status${featured?.release_label ? '' : ' is-empty'}`} aria-hidden={!featured?.release_label}>{featured?.release_label ?? '\u00a0'}</p>
           <div className="hero-details">

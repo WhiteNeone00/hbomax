@@ -10,8 +10,9 @@ async function apiRequest<T>(path: string): Promise<T> {
   return data
 }
 
-export function fetchHome() {
-  return apiRequest<HomeData>('/api/home')
+export function fetchHome(watchProgress?: Record<string, any>) {
+  const params = watchProgress ? `?watch_progress=${encodeURIComponent(JSON.stringify(watchProgress))}` : ''
+  return apiRequest<HomeData>(`/api/home${params}`)
 }
 
 export function fetchKijkwijzer(item: MediaItem) {
@@ -27,4 +28,13 @@ export function fetchKijkwijzer(item: MediaItem) {
 export async function searchTitles(query: string) {
   const data = await apiRequest<{ results: MediaItem[] }>(`/api/search?q=${encodeURIComponent(query)}`)
   return data.results
+}
+
+export async function fetchEpisodeTitle(seriesId: number, season: number, episode: number): Promise<string | null> {
+  try {
+    const data = await apiRequest<{ name: string }>(`/api/tmdb/tv/${seriesId}/season/${season}/episode/${episode}`)
+    return data.name ?? null
+  } catch {
+    return null
+  }
 }

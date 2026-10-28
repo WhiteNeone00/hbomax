@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { X, Search, Heart } from 'lucide-react'
+import { X } from 'lucide-react'
 import { BrandLogo } from './BrandLogo'
-import { profileIconUrl } from '../../assets/brandAssets'
 
 function HamburgerIcon() {
   return (

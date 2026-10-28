@@ -5,10 +5,6 @@ import { fetchKijkwijzer } from '../../services/tmdb'
 import type { MediaItem } from '../../types/media'
 import { getPoster, getTitle } from './media-utils'
 
-function yearOf(item: MediaItem) {
-  return (item.release_date ?? item.first_air_date)?.slice(0, 4) ?? ''
-}
-
 function releaseBadgeFor(item: MediaItem) {
   const label = item.release_label?.trim() ?? ''
   const normalizedLabel = label.toLowerCase()
@@ -46,16 +42,16 @@ function getWatchProgress(item: MediaItem) {
   return (item as any).watchProgress
 }
 
-export function MediaCard({ item, saved, onToggleSave, showMetadata = true, showKijkwijzer = true, featured = false, isLiveUpcoming = false, isContinueWatching = false }: {
+export function MediaCard({ item, saved, onToggleSave, showKijkwijzer = true, featured = false, isLiveUpcoming = false, isContinueWatching = false }: {
   item: MediaItem
   saved: boolean
   onToggleSave: (item: MediaItem) => void
-  showMetadata?: boolean
   showKijkwijzer?: boolean
   featured?: boolean
   isLiveUpcoming?: boolean
   isContinueWatching?: boolean
 }) {
+  // For Continue Watching, use the main show/movie poster (not episode still)
   const poster = getPoster(item.poster_path)
   const releaseBadge = releaseBadgeFor(item)
   const liveTime = isLiveUpcoming ? getLiveUpcomingTime(item) : undefined
@@ -70,6 +66,9 @@ export function MediaCard({ item, saved, onToggleSave, showMetadata = true, show
   const [contentRatingSource, setContentRatingSource] = useState(item.content_rating_source)
   const [contentRatingRegion, setContentRatingRegion] = useState(item.content_rating_region)
   const [contentRatingOriginal, setContentRatingOriginal] = useState(item.content_rating_original)
+
+  // Get episode title from item (passed from backend via HomePage)
+  const episodeTitle = (item as any).episode_title
 
   useEffect(() => {
     if (contentRating || contentRatingDescriptors.length) return
@@ -110,9 +109,31 @@ export function MediaCard({ item, saved, onToggleSave, showMetadata = true, show
   return (
     <article className={`content-card${featured ? ' featured-card' : ''}${isLiveUpcoming ? ' live-upcoming-card' : ''}${isContinueWatching ? ' continue-watching-card' : ''}`}>
       <div className="poster-frame" ref={posterFrame}>
-        {poster ? <img src={poster} alt={`${getTitle(item)} poster`} loading="lazy" /> : <div className="poster-empty"><Clapperboard size={26} /></div>}
-        {releaseBadge && <span className="content-badge">{releaseBadge}</span>}
-        {showKijkwijzer && (contentRating || contentRatingDescriptors.length > 0) && <div className="kijkwijzer-card"><KijkwijzerBadges rating={contentRating} descriptors={contentRatingDescriptors} source={contentRatingSource} region={contentRatingRegion} originalRating={contentRatingOriginal} /></div>}
+        {/* Continue Watching: Use 16:9 backdrop/banner image with title artwork on left */}
+        {isContinueWatching && item.backdrop_path ? (
+          <div className="continue-watching-banner" style={{ backgroundImage: `url(${getPoster(item.backdrop_path)})` }}>
+            <div className="continue-watching-banner-content">
+              {/* Title artwork on bottom left like HBO Max hero */}
+              {item.logo_path && (
+                <div className="continue-watching-banner-logo">
+                  <img src={getPoster(item.logo_path)} alt={`${getTitle(item)} title artwork`} loading="lazy" />
+                </div>
+              )}
+            </div>
+            {/* Continue Watching Progress Bar */}
+            {watchProgress && (
+              <div className="tile-progress-bar" aria-hidden="true">
+                <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {poster ? <img src={poster} alt={`${getTitle(item)} poster`} loading="lazy" /> : <div className="poster-empty"><Clapperboard size={26} /></div>}
+            {releaseBadge && <span className="content-badge">{releaseBadge}</span>}
+            {showKijkwijzer && (contentRating || contentRatingDescriptors.length > 0) && !isContinueWatching && <div className="kijkwijzer-card"><KijkwijzerBadges rating={contentRating} descriptors={contentRatingDescriptors} source={contentRatingSource} region={contentRatingRegion} originalRating={contentRatingOriginal} /></div>}
+          </>
+        )}
         
         {/* Live/Upcoming Overlays */}
         {isLiveUpcoming && (
@@ -131,8 +152,8 @@ export function MediaCard({ item, saved, onToggleSave, showMetadata = true, show
           </div>
         )}
         
-        {/* Continue Watching Progress Bar */}
-        {isContinueWatching && watchProgress && (
+        {/* Continue Watching Progress Bar (for non-banner case) */}
+        {isContinueWatching && !item.backdrop_path && watchProgress && (
           <div className="tile-progress-bar" aria-hidden="true">
             <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
           </div>
@@ -158,7 +179,37 @@ export function MediaCard({ item, saved, onToggleSave, showMetadata = true, show
         </div>
       )}
       
-      {/* No title/metadata displayed for featured and continue-watching rails */}
+      {/* Continue Watching: Episode info and Title below poster (like HBO Max) */}
+      {isContinueWatching && (
+        <div className="tile-meta">
+          <div className="tile-title-wrapper">
+            {item.media_type === 'tv' && watchProgress && (
+              <span className="tile-secondary-title" style={{ fontSize: '11px', fontWeight: 600, color: 'hsla(0,0%,100%,.6)', marginBottom: '2px', display: 'block' }}>
+                S{watchProgress.season} E{watchProgress.episode}
+                {episodeTitle && <span style={{ fontWeight: 700, fontSize: '13px', marginLeft: '4px', color: '#fff' }}>{episodeTitle}</span>}
+              </span>
+            )}
+            {item.media_type === 'movie' && (
+              <span className="tile-primary-title" style={{ fontSize: '13px', fontWeight: 700, color: '#fff', display: 'block' }}>
+                {getTitle(item)}
+              </span>
+            )}
+          </div>
+          {showKijkwijzer && (
+            <div className="tile-kijkwijzer">
+              {(contentRating || contentRatingDescriptors.length > 0) && (
+                <KijkwijzerBadges rating={contentRating} descriptors={contentRatingDescriptors} source={contentRatingSource} region={contentRatingRegion} originalRating={contentRatingOriginal} />
+              )}
+              {item.media_type === 'movie' && item.release_date && (
+                <span className="tile-year" style={{ color: 'hsla(0,0%,100%,.6)', fontSize: '11px', fontWeight: 700, marginLeft: '8px' }}>
+                  {new Date(item.release_date).getFullYear()}
+                </span>
+              )}
+            </div>
+          )}        </div>
+      )}
+      
+      {/* No title/metadata displayed for featured rail */}
     </article>
   )
 }

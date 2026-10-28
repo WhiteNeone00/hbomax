@@ -9,9 +9,10 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
   onToggleSave: (item: MediaItem) => void
 }) {
   const railRef = useRef<HTMLDivElement>(null)
-  const isFeatured = row.id === 'trending' || row.id === 'live-upcoming' || row.id === 'continue-watching'
+  const isFeatured = row.id === 'trending' || row.id === 'recommended' || row.id === 'live-upcoming' || row.id === 'continue-watching' || row.id === 'villains'
   const isLiveUpcoming = row.id === 'live-upcoming'
-  const hideTitle = ['series', 'movies', 'saved-titles', 'continue-watching'].includes(row.id)
+  const isContinueWatching = row.id === 'continue-watching'
+  const hideTitle = ['series', 'movies', 'saved-titles'].includes(row.id)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -36,12 +37,39 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
     }
   }, [row.items.length])
 
-  function scroll(direction: number) {
+  function getItemWidth(): number {
+    const width = railRef.current?.clientWidth ?? 0
+    // Determine breakpoint and return appropriate item width
+    if (width >= 1537) {
+      // 100% zoom = 1920px
+      return isLiveUpcoming ? 283.325 : isContinueWatching ? 325 : 207.5
+    } else if (width >= 1281) {
+      // 125% zoom = 1536px
+      return isLiveUpcoming ? 339 : isContinueWatching ? 325 : 219.325
+    } else if (width >= 1025) {
+      // 150% zoom = 1280px
+      return isLiveUpcoming ? 284 : isContinueWatching ? 325 : 184
+    } else if (width >= 769) {
+      // tablet landscape
+      return isLiveUpcoming ? 333.86 : isContinueWatching ? 325 : 229
+    } else if (width >= 641) {
+      // tablet portrait / 200% zoom
+      return isLiveUpcoming ? 288 : isContinueWatching ? 325 : 213
+    } else if (width >= 376) {
+      // mobile / 250-300% zoom
+      return isLiveUpcoming ? 288 : isContinueWatching ? 325 : 174
+    } else {
+      // ≤375px small mobile
+      return isLiveUpcoming ? 234.66 : isContinueWatching ? 325 : 142
+    }
+  }
+
+function scroll(direction: number) {
     const rail = railRef.current
     if (!rail) return
     
     // Scroll by one item width plus gap, so we see half of the next/previous item
-    const itemWidth = isLiveUpcoming ? 258 : 220 // live-upcoming: 258px, featured: 220px
+    const itemWidth = getItemWidth()
     const gap = 16
     const distance = itemWidth + gap
     rail.scrollBy({ left: direction * distance, behavior: 'smooth' })
@@ -59,8 +87,8 @@ export function ContentRail({ row, savedIds, onToggleSave }: {
       <div className="section-heading">
         {!hideTitle && <div><h2>{row.title}</h2></div>}
       </div>
-      <div className={`content-rail${isFeatured ? ' is-featured-rail' : ''}${row.id === 'live-upcoming' ? ' is-live-upcoming-rail' : ''}`} ref={railRef}>
-        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showMetadata={false} showKijkwijzer={row.id !== 'trending' && row.id !== 'live-upcoming'} featured={isFeatured} isLiveUpcoming={row.id === 'live-upcoming'} isContinueWatching={row.id === 'continue-watching'} />)}
+      <div className={`content-rail${isFeatured ? ' is-featured-rail' : ''}${row.id === 'live-upcoming' ? ' is-live-upcoming-rail' : ''}${isContinueWatching ? ' is-continue-watching-rail' : ''}`} ref={railRef}>
+        {row.items.map((item) => <MediaCard key={`${item.media_type ?? 'title'}-${item.id}`} item={item} saved={savedIds.has(item.id)} onToggleSave={onToggleSave} showKijkwijzer={row.id !== 'trending' && row.id !== 'recommended' && row.id !== 'live-upcoming' && row.id !== 'villains'} featured={isFeatured} isLiveUpcoming={row.id === 'live-upcoming'} isContinueWatching={row.id === 'continue-watching'} />)}
         {isLiveUpcoming && (
           <a 
             href="/live-sports-schedule" 

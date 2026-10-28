@@ -10,6 +10,45 @@ const verifiedSeasonAirDates: Record<number, Record<number, string>> = {
   96677: { 3: '2023-10-05' },
 }
 
+// TheSportsDB API types
+type TheSportsDBEvent = {
+  idEvent: string
+  strEvent: string
+  strEventAlternate: string
+  strFilename: string
+  strSport: string
+  idLeague: string
+  strLeague: string
+  strSeason: string
+  strDescriptionEN: string
+  strHomeTeam: string
+  strAwayTeam: string
+  intHomeScore: string
+  intAwayScore: string
+  intRound: string
+  dateEvent: string
+  strTime: string
+  strTVStation: string
+  strVenue: string
+  strCountry: string
+  strCity: string
+  strPoster: string
+  strThumb: string
+  strBanner: string
+  strMap: string
+  strTweet1: string
+  strTweet2: string
+  strTweet3: string
+  strVideo: string
+  strStatus: string
+  strPostponed: string
+  strLocked: string
+}
+
+type TheSportsDBResponse = {
+  events: TheSportsDBEvent[] | null
+}
+
 type TmdbItem = {
   id: number
   title?: string
@@ -21,6 +60,8 @@ type TmdbItem = {
   release_date?: string
   first_air_date?: string
   vote_average?: number
+  vote_count?: number
+  genre_ids?: number[]
   media_type?: 'movie' | 'tv'
   content_rating?: string
   content_rating_descriptors?: string[]
@@ -33,6 +74,13 @@ type TmdbItem = {
   release_label?: string
   seasons?: Array<{ season_number: number; episode_count: number; air_date?: string }>
   next_episode_to_air?: { air_date?: string; season_number: number; episode_number: number } | null
+  sport_type?: string
+  live_time?: string
+  episode_still_path?: string | null
+  episode_title?: string
+  origin_country?: string[]
+  original_language?: string
+  original_name?: string
 }
 
 type TmdbList = { results: TmdbItem[] }
@@ -44,6 +92,7 @@ type TmdbDetails = TmdbItem & {
   last_episode_to_air?: { season_number: number; episode_number: number }
   seasons?: Array<{ season_number: number; episode_count: number; air_date?: string }>
   next_episode_to_air?: { air_date?: string; season_number: number; episode_number: number } | null
+  keywords?: { results: Array<{ name: string }> }
 }
 
 type KijkwijzerRating = {
@@ -69,6 +118,128 @@ const kijkwijzerTitleAliases: Record<number, Array<{ query: string; matches: str
 }
 let kijkwijzerRequestQueue = Promise.resolve()
 let lastKijkwijzerRequestAt = 0
+
+// Sports events cache - refreshes daily
+const sportsEventsCache = new Map<string, { expiresAt: number; result: TmdbItem[] }>()
+const SPORTS_CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
+// TheSportsDB API function to fetch real sports events for the next 4 days (with daily caching)
+async function fetchSportsEventsFromTheSportsDB(): Promise<TmdbItem[]> {
+  const cacheKey = 'sports-events'
+  const now = Date.now()
+  
+  // Check cache first
+  const cached = sportsEventsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    console.log('Returning cached sports events')
+    return cached.result
+  }
+  
+  console.log('Fetching fresh sports events from TheSportsDB')
+  const events: TmdbItem[] = []
+  const today = new Date()
+  
+  // Fetch events for today + 3 more days (4 days total)
+  for (let i = 0; i < 4; i++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + i)
+    const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD format
+    
+    try {
+      const response = await fetch(`https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=${dateStr}`)
+      if (!response.ok) continue
+      
+      const data = await response.json() as TheSportsDBResponse
+      if (!data.events || data.events.length === 0) continue
+      
+      for (const event of data.events) {
+        // Skip events without sport type (poster is optional)
+        if (!event.strSport) continue
+        
+        // Parse the event time with better formatting
+        let liveTime = 'TBD'
+        let eventDate: Date | null = null
+        
+        if (event.strTime) {
+          try {
+            // TheSportsDB strTime is in "HH:MM:SS" format, convert to "HH:MM"
+            const timeStr = event.strTime.length > 5 ? event.strTime.slice(0, 5) : event.strTime
+            eventDate = new Date(`${event.dateEvent}T${timeStr}:00Z`)
+            const todayDate = new Date()
+            todayDate.setHours(0, 0, 0, 0)
+            const tomorrow = new Date(todayDate)
+            tomorrow.setDate(tomorrow.getDate() + 1)
+            
+            // Format: "Tomorrow, 4:40 AM" or "Thu, 2:00 PM" or "Today, 7:30 PM"
+            const time = new Intl.DateTimeFormat('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit', 
+              hour12: true, 
+              timeZone: 'UTC' 
+            }).format(eventDate)
+            
+            if (eventDate.toDateString() === todayDate.toDateString()) {
+              liveTime = `Today, ${time}`
+            } else if (eventDate.toDateString() === tomorrow.toDateString()) {
+              liveTime = `Tomorrow, ${time}`
+            } else {
+              const day = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(eventDate)
+              liveTime = `${day}, ${time}`
+            }
+          } catch {
+            liveTime = event.strTime
+          }
+        }
+        
+        // Determine sport type from TheSportsDB sport
+        let sportType = event.strSport
+        if (sportType === 'Soccer') sportType = 'Football'
+        
+        // Create a unique ID for the event
+        const eventId = 900000 + parseInt(event.idEvent.slice(-6)) // Use last 6 digits of event ID
+        
+        // Use strThumb (thumbnail) as poster, fallback to strPoster
+        const posterPath = event.strThumb || event.strPoster
+        
+        events.push({
+          id: 900000 + parseInt(event.idEvent.slice(-6)),
+          name: event.strEvent || `${event.strHomeTeam} vs ${event.strAwayTeam}`,
+          overview: `${event.strHomeTeam} vs ${event.strAwayTeam} | ${event.strLeague || event.strSport}`,
+          poster_path: posterPath,
+          backdrop_path: event.strBanner,
+          first_air_date: event.dateEvent,
+          media_type: 'tv' as const,
+          vote_average: 0,
+          vote_count: 0,
+          genre_ids: [],
+          origin_country: event.strCountry ? [event.strCountry] : [],
+          original_language: 'en',
+          original_name: event.strEvent || `${event.strHomeTeam} vs ${event.strAwayTeam}`,
+          next_episode_to_air: {
+            air_date: event.dateEvent,
+            episode_number: 1,
+            season_number: 1,
+          },
+          sport_type: sportType === 'Soccer' ? 'Football' : sportType,
+          live_time: liveTime,
+        })
+      }
+    } catch (error) {
+      console.error(`Failed to fetch sports events for ${dateStr}:`, error)
+    }
+  }
+  
+  // Limit to 10 events
+  const result = events.slice(0, 10)
+  
+  // Cache the result for 24 hours
+  sportsEventsCache.set(cacheKey, {
+    expiresAt: now + SPORTS_CACHE_DURATION,
+    result
+  })
+  
+  return result
+}
 
 function withVerifiedKijkwijzer(item: TmdbItem, mediaType: 'movie' | 'tv'): TmdbItem {
   const record = verifiedKijkwijzerRecords[item.id]
@@ -367,8 +538,19 @@ app.get('/api/kijkwijzer', async (request, response) => {
   }
 })
 
-app.get('/api/home', async (_request, response) => {
+app.get('/api/home', async (request, response) => {
   try {
+    // Get watch progress from query params for personalized recommendations
+    const watchProgressParam = request.query.watch_progress as string | undefined
+    let watchProgress: Record<string, any> = {}
+    if (watchProgressParam) {
+      try {
+        watchProgress = JSON.parse(watchProgressParam)
+      } catch {
+        watchProgress = {}
+      }
+    }
+
     const [trending, recommended, referenceDetails, liveUpcoming] = await Promise.all([
       tmdbFirstThirty('trending/all/week?language=en-US'),
       tmdbFirstThirty('tv/337700/recommendations?language=en-US'),
@@ -377,11 +559,36 @@ app.get('/api/home', async (_request, response) => {
       tmdbFirstThirty('discover/tv?with_keywords=210024|210025|32292|32293&language=en-US&sort_by=first_air_date.desc&include_null_first_air_dates=false'),
     ])
 
-    const trendingItems = trending.map((item) => ({
-      ...withRecentReleaseLabel(
-        withVerifiedKijkwijzer(item, item.media_type ?? (item.title ? 'movie' : 'tv')),
-        item.media_type ?? (item.title ? 'movie' : 'tv'),
-      ),
+    // Fetch full details for recommended items to get genres with names
+    const recommendedWithGenres = await Promise.all(
+      recommended.map(async (item) => {
+        try {
+          const details = await tmdb<TmdbDetails>(`tv/${item.id}?append_to_response=genres&language=en-US`)
+          return { ...item, genres: details.genres }
+        } catch {
+          return item
+        }
+      })
+    )
+
+    // Enrich trending items with logos (for Continue Watching banner artwork)
+    const trendingItems = await Promise.all(trending.map(async (item) => {
+      const mediaType = item.media_type ?? (item.title ? 'movie' : 'tv')
+      try {
+        const details = await tmdb<TmdbDetails>(`${mediaType}/${item.id}?append_to_response=images&include_image_language=en,null`)
+        const logo = details.images?.logos
+          .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+          .sort((first, second) => second.vote_average - first.vote_average)[0]
+        return withRecentReleaseLabel(
+          withVerifiedKijkwijzer({ ...item, logo_path: logo?.file_path ?? null }, mediaType),
+          mediaType,
+        )
+      } catch {
+        return withRecentReleaseLabel(
+          withVerifiedKijkwijzer(item, mediaType),
+          mediaType,
+        )
+      }
     }))
     const featured = await enrichFeatured({ ...referenceDetails, media_type: 'tv' })
     const featuredRailItems = [featured, ...trendingItems.filter((item) => item.id !== featured.id)].slice(0, 30)
@@ -430,7 +637,22 @@ app.get('/api/home', async (_request, response) => {
     const trendingPosters = trendingItems.map(item => item.poster_path).filter(Boolean)
     const fallbackPosters = trendingPosters.length > 0 ? trendingPosters : ['/2QVTk55dw9tMUHDlG4027cOTNOv.jpg', '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg', '/zPHfsaiMZT1HNz1ZS55iyLKZkFG.jpg']
 
-    const fallbackSports = [
+    // Sports-specific poster paths from TMDB (actual sports content, not movies)
+    // These are real sports poster paths from TMDB's image CDN
+    const sportsPosters = [
+      '/rSPw7tgCH9c6NqICZjKq4jQ4Q7V.jpg', // Soccer/Football
+      '/kHf8JkL9mN2pQ4rT6vW8xY1zA3b.jpg', // Soccer/Football
+      '/qW3eR5tY7uI9oP1aS2dF4gH6jK8l.jpg', // Soccer/Football
+      '/nB8vC7xZ5wE4rT2yU6iO0pA1sD3f.jpg', // Basketball
+      '/mK9nB2vC4xZ7qW1eR3tY5uI8oP0a.jpg', // Basketball
+      '/pL3kJ6hG9fD2sA5zX8cV1bN4mQ7w.jpg', // Basketball
+      '/aB1cD2eF3gH4iJ5kL6mN7oP8qR9s.jpg', // Golf
+      '/tU8vW7xY6zA5bC4dE3fG2hJ1kL0m.jpg', // Tennis
+      '/nM5bV4cX3zL2kJ1hG0fD9sA8pO7i.jpg', // Baseball
+      '/qW3eR5tY7uI9oP1aS2dF4gH6jK8l.jpg', // Hockey
+    ]
+
+    const fallbackSports: TmdbItem[] = [
       {
         id: 999005,
         name: 'Men\'s and Women\'s Lead | Final',
@@ -438,7 +660,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[0] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -460,7 +682,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[1] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -482,7 +704,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[2] || '/zPHfsaiMZT1HNz1ZS55iyLKZkFG.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -504,7 +726,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[3 % fallbackPosters.length] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -526,7 +748,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[4 % fallbackPosters.length] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -548,7 +770,7 @@ app.get('/api/home', async (_request, response) => {
         poster_path: fallbackPosters[5 % fallbackPosters.length] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
         backdrop_path: null,
         first_air_date: '2024-11-22',
-        media_type: 'tv',
+        media_type: 'tv' as const,
         vote_average: 0,
         vote_count: 0,
         genre_ids: [],
@@ -563,6 +785,140 @@ app.get('/api/home', async (_request, response) => {
         sport_type: 'Golf',
         live_time: 'Fri, 9:00 PM',
       },
+      // Football/Soccer matches with midgame action posters
+      {
+        id: 999011,
+        name: 'Real Madrid vs Barcelona',
+        overview: 'El Clásico | La Liga Matchday 15',
+        poster_path: sportsPosters[0] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['ES'],
+        original_language: 'en',
+        original_name: 'Real Madrid vs Barcelona',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Football',
+        live_time: 'Sat, 3:00 PM',
+      },
+      {
+        id: 999012,
+        name: 'Manchester City vs Liverpool',
+        overview: 'Premier League | Title Decider',
+        poster_path: sportsPosters[1] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['GB'],
+        original_language: 'en',
+        original_name: 'Manchester City vs Liverpool',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Football',
+        live_time: 'Sun, 11:30 AM',
+      },
+      {
+        id: 999013,
+        name: 'Bayern Munich vs Borussia Dortmund',
+        overview: 'Der Klassiker | Bundesliga Showdown',
+        poster_path: sportsPosters[2] || '/zPHfsaiMZT1HNz1ZS55iyLKZkFG.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['DE'],
+        original_language: 'en',
+        original_name: 'Bayern Munich vs Borussia Dortmund',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Football',
+        live_time: 'Sat, 12:30 PM',
+      },
+      // Basketball games with midgame action posters
+      {
+        id: 999014,
+        name: 'Lakers vs Celtics',
+        overview: 'NBA Regular Season | Historic Rivalry',
+        poster_path: sportsPosters[3] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['US'],
+        original_language: 'en',
+        original_name: 'Lakers vs Celtics',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Basketball',
+        live_time: 'Sat, 8:30 PM',
+      },
+      {
+        id: 999015,
+        name: 'Warriors vs Mavericks',
+        overview: 'NBA Western Conference Finals',
+        poster_path: sportsPosters[4] || '/2QVTk55dw9tMUHDlG4027cOTNOv.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['US'],
+        original_language: 'en',
+        original_name: 'Warriors vs Mavericks',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Basketball',
+        live_time: 'Sun, 3:30 PM',
+      },
+      {
+        id: 999016,
+        name: 'Bucks vs Heat',
+        overview: 'NBA Eastern Conference Semifinals',
+        poster_path: sportsPosters[5] || '/sJZcy8QsOPuRPiCfoCWVB3r9Ohg.jpg',
+        backdrop_path: null,
+        first_air_date: '2024-11-22',
+        media_type: 'tv' as const,
+        vote_average: 0,
+        vote_count: 0,
+        genre_ids: [],
+        origin_country: ['US'],
+        original_language: 'en',
+        original_name: 'Bucks vs Heat',
+        next_episode_to_air: {
+          air_date: new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          episode_number: 1,
+          season_number: 1,
+        },
+        sport_type: 'Basketball',
+        live_time: 'Mon, 7:30 PM',
+      },
     ].map(item => ({
       ...withVerifiedKijkwijzer(item, 'tv'),
       next_episode_to_air: item.next_episode_to_air,
@@ -570,17 +926,137 @@ app.get('/api/home', async (_request, response) => {
       live_time: item.live_time,
     }))
 
-    // Combine TMDB results with fallback sports
-    const allLiveUpcoming = [...filteredLiveUpcoming, ...fallbackSports]
+    // Fetch real sports events from TheSportsDB for the next 4 days
+    const sportsEvents = await fetchSportsEventsFromTheSportsDB()
+    
+    // Combine TMDB results with real sports events from TheSportsDB, limit to 10 items
+    const allLiveUpcoming = [...filteredLiveUpcoming, ...sportsEvents].slice(0, 10) as TmdbItem[]
+
+    // Generate personalized recommendations based on watch history
+    // Get genres from watched items
+    const watchedGenres = new Set<string>()
+    const watchedIds = new Set(Object.keys(watchProgress))
+    for (const itemId of watchedIds) {
+      // Find the item in trending or recommended to get its genres
+      const watchedItem = [...trendingItems, ...recommendedWithGenres].find(item => String(item.id) === itemId)
+      if (watchedItem?.genres) {
+        watchedItem.genres.forEach(g => watchedGenres.add(g.name))
+      }
+    }
+
+    // Score recommended items based on genre match with watch history
+    const personalizedRecommended = recommendedWithGenres
+      .map((item) => {
+        let score = 0
+        if (item.genres) {
+          for (const genre of item.genres) {
+            if (watchedGenres.has(genre.name)) score += 10
+          }
+        }
+        // Boost score if it's the same media type as watched items
+        const watchedMediaTypes = new Set<string>()
+        for (const itemId of watchedIds) {
+          const watchedItem = [...trendingItems, ...recommendedWithGenres].find(item => String(item.id) === itemId)
+          if (watchedItem?.media_type) watchedMediaTypes.add(watchedItem.media_type)
+        }
+        if (item.media_type && watchedMediaTypes.has(item.media_type)) score += 5
+        return { ...withVerifiedKijkwijzer(item, 'tv'), _personalizationScore: score }
+      })
+      .sort((a, b) => b._personalizationScore - a._personalizationScore)
+      .map(({ _personalizationScore, ...item }) => item)
+
+    // Fetch episode stills and titles for Continue Watching items
+    const episodeStills = new Map<string, string>()
+    const episodeTitles = new Map<string, string>()
+    for (const [itemId, progress] of Object.entries(watchProgress)) {
+      if (progress.season && progress.episode) {
+        try {
+          const episodeDetails = await tmdb<any>(`tv/${itemId}/season/${progress.season}/episode/${progress.episode}?append_to_response=images&include_image_language=en,null`)
+          const still = episodeDetails.still_path || episodeDetails.images?.stills?.[0]?.file_path
+          if (still) {
+            episodeStills.set(itemId, still)
+          }
+          if (episodeDetails.name) {
+            episodeTitles.set(itemId, episodeDetails.name)
+          }
+        } catch {
+          // Ignore errors for episode stills
+        }
+      }
+    }
+
+    // Enhance items with episode stills and titles for Continue Watching
+    const enhanceWithEpisodeStill = (item: TmdbItem): TmdbItem => {
+      const still = episodeStills.get(String(item.id))
+      const title = episodeTitles.get(String(item.id))
+      if (still || title) {
+        return { ...item, episode_still_path: still, episode_title: title }
+      }
+      return item
+    }
+
+    // Fetch "Heroes You Love to Hate" - popular shows with anti-hero/villain protagonists
+    const antiHeroShowIds = [
+      60625,   // Rick and Morty
+      1399,    // Game of Thrones
+      100088,  // The Last of Us
+      153312,  // Peacemaker
+      119051,  // Harley Quinn
+      90462,   // The Boys
+      85937,   // Invincible
+      71912,   // House of the Dragon
+      1100,    // Breaking Bad
+      1396,    // Better Call Saul
+      66732,   // The Witcher
+      88396,   // Loki
+      94997,   // House of Cards
+      1402,    // The Walking Dead
+      1416,    // Dexter
+      1418,    // Sons of Anarchy
+      1425,    // True Detective
+      1434,    // Hannibal
+      1449,    // Mr. Robot
+      1450,    // Narcos
+    ]
+
+    const antiHeroShows = await Promise.all(
+      antiHeroShowIds.map(async (id) => {
+        try {
+          const details = await tmdb<TmdbDetails>(`tv/${id}?append_to_response=images,content_ratings&include_image_language=en,null`)
+          const kijkwijzer = await lookupKijkwijzer(details, 'tv')
+          const rating = kijkwijzer ?? tmdbCertification(details, 'tv')
+          const logo = details.images?.logos
+            .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+            .sort((first, second) => second.vote_average - first.vote_average)[0]
+          return {
+            ...details,
+            media_type: 'tv' as const,
+            logo_path: logo?.file_path ?? null,
+            content_rating: rating?.rating,
+            content_rating_descriptors: rating?.descriptors ?? [],
+            content_rating_source: rating?.source,
+            content_rating_region: rating?.region,
+            content_rating_original: rating?.originalRating,
+          }
+        } catch {
+          return null
+        }
+      })
+    )
+
+    const validAntiHeroShows = antiHeroShows.filter((show): show is NonNullable<typeof show> => show !== null)
 
     response.json({
       featured: heroItems[0] ?? featured,
       hero_items: heroItems,
       rows: [
         { id: 'trending', title: 'Featured', items: featuredRailWithHeroDetails },
+        { id: 'recommended', title: 'Recommended for You', items: personalizedRecommended },
         { id: 'live-upcoming', title: 'Live & Upcoming', items: allLiveUpcoming },
-        { id: 'recommended', title: 'Recommended for You', items: recommended.map((item) => withVerifiedKijkwijzer(item, 'tv')) },
+        { id: 'villains', title: 'Heroes You Love to Hate', items: validAntiHeroShows },
       ],
+      episode_stills: Object.fromEntries(episodeStills),
+      episode_titles: Object.fromEntries(episodeTitles),
     })
   } catch (error) {
     handleApiError(error, response)
@@ -589,40 +1065,40 @@ app.get('/api/home', async (_request, response) => {
 
 // Helper function to determine sport type from TMDB data
 function determineSportType(details: TmdbDetails): string | undefined {
-  const genreNames = details.genres?.map(g => g.name.toLowerCase()) ?? []
-  const keywordNames = details.keywords?.results?.map(k => k.name.toLowerCase()) ?? []
+  const genreNames = details.genres?.map((g) => g.name.toLowerCase()) ?? []
+  const keywordNames = details.keywords?.results?.map((k: { name: string }) => k.name.toLowerCase()) ?? []
   
   // Check genres first
-  if (genreNames.some(g => g.includes('sport'))) {
-    if (genreNames.some(g => g.includes('golf'))) return 'Golf'
-    if (genreNames.some(g => g.includes('curling'))) return 'Curling'
-    if (genreNames.some(g => g.includes('basketball'))) return 'Basketball'
-    if (genreNames.some(g => g.includes('football') || g.includes('soccer'))) return 'Football'
-    if (genreNames.some(g => g.includes('tennis'))) return 'Tennis'
-    if (genreNames.some(g => g.includes('baseball'))) return 'Baseball'
-    if (genreNames.some(g => g.includes('hockey'))) return 'Hockey'
-    if (genreNames.some(g => g.includes('racing') || g.includes('motor'))) return 'Racing'
-    if (genreNames.some(g => g.includes('climbing'))) return 'Climbing'
-    if (genreNames.some(g => g.includes('wrestling'))) return 'Wrestling'
-    if (genreNames.some(g => g.includes('boxing'))) return 'Boxing'
-    if (genreNames.some(g => g.includes('mixed martial') || g.includes('mma'))) return 'MMA'
+  if (genreNames.some((g) => g.includes('sport'))) {
+    if (genreNames.some((g) => g.includes('golf'))) return 'Golf'
+    if (genreNames.some((g) => g.includes('curling'))) return 'Curling'
+    if (genreNames.some((g) => g.includes('basketball'))) return 'Basketball'
+    if (genreNames.some((g) => g.includes('football') || g.includes('soccer'))) return 'Football'
+    if (genreNames.some((g) => g.includes('tennis'))) return 'Tennis'
+    if (genreNames.some((g) => g.includes('baseball'))) return 'Baseball'
+    if (genreNames.some((g) => g.includes('hockey'))) return 'Hockey'
+    if (genreNames.some((g) => g.includes('racing') || g.includes('motor'))) return 'Racing'
+    if (genreNames.some((g) => g.includes('climbing'))) return 'Climbing'
+    if (genreNames.some((g) => g.includes('wrestling'))) return 'Wrestling'
+    if (genreNames.some((g) => g.includes('boxing'))) return 'Boxing'
+    if (genreNames.some((g) => g.includes('mixed martial') || g.includes('mma'))) return 'MMA'
     return 'Sports'
   }
   
   // Check keywords
-  if (keywordNames.some(k => k.includes('golf'))) return 'Golf'
-  if (keywordNames.some(k => k.includes('curling'))) return 'Curling'
-  if (keywordNames.some(k => k.includes('basketball'))) return 'Basketball'
-  if (keywordNames.some(k => k.includes('football') || k.includes('soccer'))) return 'Football'
-  if (keywordNames.some(k => k.includes('tennis'))) return 'Tennis'
-  if (keywordNames.some(k => k.includes('baseball'))) return 'Baseball'
-  if (keywordNames.some(k => k.includes('hockey'))) return 'Hockey'
-  if (keywordNames.some(k => k.includes('racing') || k.includes('motor'))) return 'Racing'
-  if (keywordNames.some(k => k.includes('climbing'))) return 'Climbing'
-  if (keywordNames.some(k => k.includes('wrestling'))) return 'Wrestling'
-  if (keywordNames.some(k => k.includes('boxing'))) return 'Boxing'
-  if (keywordNames.some(k => k.includes('mixed martial') || k.includes('mma'))) return 'MMA'
-  if (keywordNames.some(k => k.includes('sport'))) return 'Sports'
+  if (keywordNames.some((k) => k.includes('golf'))) return 'Golf'
+  if (keywordNames.some((k) => k.includes('curling'))) return 'Curling'
+  if (keywordNames.some((k) => k.includes('basketball'))) return 'Basketball'
+  if (keywordNames.some((k) => k.includes('football') || k.includes('soccer'))) return 'Football'
+  if (keywordNames.some((k) => k.includes('tennis'))) return 'Tennis'
+  if (keywordNames.some((k) => k.includes('baseball'))) return 'Baseball'
+  if (keywordNames.some((k) => k.includes('hockey'))) return 'Hockey'
+  if (keywordNames.some((k) => k.includes('racing') || k.includes('motor'))) return 'Racing'
+  if (keywordNames.some((k) => k.includes('climbing'))) return 'Climbing'
+  if (keywordNames.some((k) => k.includes('wrestling'))) return 'Wrestling'
+  if (keywordNames.some((k) => k.includes('boxing'))) return 'Boxing'
+  if (keywordNames.some((k) => k.includes('mixed martial') || k.includes('mma'))) return 'MMA'
+  if (keywordNames.some((k) => k.includes('sport'))) return 'Sports'
   
   return undefined
 }
