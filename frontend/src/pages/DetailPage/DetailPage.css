@@ -1110,7 +1110,7 @@
 
 /* Episode Tile - HBO Max Style */
 .episode-tile {
-  width: 339px;
+  width: 283.33px;
   flex-shrink: 0;
   cursor: pointer;
   position: relative;
@@ -1118,6 +1118,11 @@
 
 .episode-tile:hover {
   /* No scale transform - HBO Max doesn't scale tiles */
+}
+
+/* Remove outline hover effect */
+.episode-tile:hover .episode-tile-outline {
+  border-color: transparent;
 }
 
 .episode-tile-link {
@@ -1128,8 +1133,8 @@
 
 .episode-tile-image-container {
   position: relative;
-  width: 339px;
-  height: 190px; /* 16:9 aspect ratio for 339x190 */
+  width: 283.33px;
+  height: 159.36px; /* 16:9 aspect ratio for 283.33x159.36 */
   border-radius: 4px;
   overflow: hidden;
   background: #181c21;
@@ -1186,8 +1191,8 @@
   position: absolute;
   bottom: 12px;
   left: 8px;
-  width: 8px;
-  height: 8px;
+  width: 22px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1209,8 +1214,8 @@
 
 .episode-tile-play-icon svg,
 .episode-tile-play-solid-icon svg {
-  width: 10px;
-  height: 8px;
+  width: 22px;
+  height: 28px;
   fill: #fff;
 }
 
@@ -2004,7 +2009,7 @@
 
 /* Episode Tile - HBO Max Style (Responsive) */
 .episode-tile {
-  width: 339px;
+  width: 283.33px;
   flex-shrink: 0;
   cursor: pointer;
   position: relative;
@@ -2012,6 +2017,11 @@
 
 .episode-tile:hover {
   /* No scale transform - HBO Max doesn't scale tiles */
+}
+
+/* Remove outline hover effect */
+.episode-tile:hover .episode-tile-outline {
+  border-color: transparent;
 }
 
 .episode-tile-link {
@@ -2022,8 +2032,8 @@
 
 .episode-tile-image-container {
   position: relative;
-  width: 339px;
-  height: 190px; /* 16:9 aspect ratio for 339x190 */
+  width: 283.33px;
+  height: 159.36px; /* 16:9 aspect ratio for 283.33x159.36 */
   border-radius: 4px;
   overflow: hidden;
   background: #181c21;
@@ -2075,12 +2085,11 @@
   z-index: 2;
 }
 
-.episode-tile-play-icon,
-.episode-tile-play-solid-icon {
+.episode-tile-play-icon {
   position: absolute;
   bottom: 12px;
   left: 8px;
-  width: 28px;
+  width: 22px;
   height: 28px;
   display: flex;
   align-items: center;
@@ -2090,7 +2099,16 @@
 }
 
 .episode-tile-play-solid-icon {
+  position: absolute;
+  bottom: 12px;
+  left: 8px;
+  width: 22px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
+  pointer-events: none;
 }
 
 .episode-tile:hover .episode-tile-play-icon {
@@ -2101,9 +2119,14 @@
   opacity: 1;
 }
 
-.episode-tile-play-icon svg,
+.episode-tile-play-icon svg {
+  width: 22px;
+  height: 28px;
+  fill: #fff;
+}
+
 .episode-tile-play-solid-icon svg {
-  width: 28px;
+  width: 22px;
   height: 28px;
   fill: #fff;
 }
@@ -2282,6 +2305,11 @@
   padding: 60px 20px;
   text-align: center;
   color: rgba(255, 255, 255, 0.5);
+}
+
+/* Remove dropdown menu border/outline */
+.season-dropdown-menu {
+  border: none !important;
 }
 
 /* Recommendations Rail */

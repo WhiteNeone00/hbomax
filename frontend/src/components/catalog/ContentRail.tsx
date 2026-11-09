@@ -15,7 +15,7 @@ const LeftArrowIcon = () => (
 )
 
 // Hero-style arrow icons for episodes rail (smaller version of hero arrows)
-const EpisodeRailArrowIcon = ({ direction }: { direction: 'previous' | 'next' }) => (
+export const EpisodeRailArrowIcon = ({ direction }: { direction: 'previous' | 'next' }) => (
   <svg className={`episode-rail-arrow-icon is-${direction}`} viewBox="0 0 48 48" aria-hidden="true" fill="currentColor">
     <path className="episode-rail-arrow-outline" d="M11.29 24 28.502 6.787a1.714 1.714 0 0 1 2.425 2.425L16.139 24l14.788 14.788a1.714 1.714 0 1 1-2.425 2.424L11.29 23.999Z" />
     <path className="episode-rail-arrow-solid" d="M10.684 24 28.199 6.485a2.143 2.143 0 0 1 3.03 3.03L16.744 24 31.23 38.485a2.143 2.143 0 0 1-3.03 3.03L10.684 24Z" />

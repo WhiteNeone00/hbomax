@@ -324,6 +324,19 @@ export default function DetailPage() {
     rail.scrollBy({ left: direction * distance, behavior: 'smooth' })
   }
 
+  // Derive variables early (before useEffect for hook consistency)
+  const title = detail ? getTitle(detail) : ''
+  const backdropUrl = detail ? getBackdrop(detail.backdrop_path, 'original') : ''
+  const logoUrl = detail ? getLogo(detail.logo_path) : ''
+  const genres = detail?.genres?.slice(0, 3).map(g => g.name) ?? []
+  const year = detail?.release_date?.slice(0, 4) || detail?.first_air_date?.slice(0, 4) || ''
+  const seasonsCount = detail?.number_of_seasons || detail?.seasons?.length || 0
+  const isSeries = detail?.media_type === 'tv'
+  const activeSeasonData = detail?.seasons?.find(s => s.season_number === activeSeason)
+  const episodes = activeSeasonData?.episodes || []
+  const recommendations = detail?.recommendations?.slice(0, 12) || []
+
+  // Episodes rail scroll effect - must be before early returns for hook consistency
   useEffect(() => {
     const rail = episodesRailRef.current
     if (!rail) return
@@ -367,17 +380,6 @@ export default function DetailPage() {
       </div>
     )
   }
-
-  const title = getTitle(detail)
-  const backdropUrl = getBackdrop(detail.backdrop_path, 'original')
-  const logoUrl = getLogo(detail.logo_path)
-  const genres = detail.genres?.slice(0, 3).map(g => g.name) ?? []
-  const year = detail.release_date?.slice(0, 4) || detail.first_air_date?.slice(0, 4) || ''
-  const seasonsCount = detail.number_of_seasons || detail.seasons?.length || 0
-  const isSeries = detail.media_type === 'tv'
-  const activeSeasonData = detail.seasons?.find(s => s.season_number === activeSeason)
-  const episodes = activeSeasonData?.episodes || []
-  const recommendations = detail.recommendations?.slice(0, 12) || []
 
   // Hero background image: for TV shows use first episode's still (banner thumbnail), for movies use backdrop
   const heroBackgroundUrl = isSeries && episodes.length > 0 && episodes[0].still_path
