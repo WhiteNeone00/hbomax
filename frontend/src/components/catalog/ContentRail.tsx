@@ -1,7 +1,26 @@
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ContentRow, MediaItem } from '../../types/media'
 import { MediaCard } from './MediaCard'
+
+// HBO Max SVG icons for pagination arrows (ContentRail style)
+const LeftArrowIcon = () => (
+  <div className="StyledArrowIconContainer-Fuse-Web-Play__sc-1sv8jow-2 kbltqf">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="#fff" focusable="false" stroke="none" viewBox="0 0 48 48" role="presentation" aria-hidden="true" className="StyledArrowIcon-Fuse-Web-Play__sc-1sv8jow-0 kNhwiN">
+      <path fillRule="evenodd" clipRule="evenodd" d="M36.71 24 19.498 31.213a1.714 1.714 0 0 1-2.425-2.425L31.861 24 19.073 9.212a1.714 1.714 0 1 1 2.425-2.424L36.71 21.999Z"></path>
+    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="#fff" focusable="false" stroke="none" viewBox="0 0 48 48" role="presentation" aria-hidden="true" className="StyledArrowIconSolid-Fuse-Web-Play__sc-1sv8jow-1 cIzlnm">
+      <path fillRule="evenodd" clipRule="evenodd" d="M37.316 24 19.801 37.515a2.143 2.143 0 0 1-3.03-3.03L31.256 24 16.77 8.485a2.143 2.143 0 0 1 3.03-3.03L37.316 20.999Z"></path>
+    </svg>
+  </div>
+)
+
+// Hero-style arrow icons for episodes rail (smaller version of hero arrows)
+const EpisodeRailArrowIcon = ({ direction }: { direction: 'previous' | 'next' }) => (
+  <svg className={`episode-rail-arrow-icon is-${direction}`} viewBox="0 0 48 48" aria-hidden="true" fill="currentColor">
+    <path className="episode-rail-arrow-outline" d="M11.29 24 28.502 6.787a1.714 1.714 0 0 1 2.425 2.425L16.139 24l14.788 14.788a1.714 1.714 0 1 1-2.425 2.424L11.29 23.999Z" />
+    <path className="episode-rail-arrow-solid" d="M10.684 24 28.199 6.485a2.143 2.143 0 0 1 3.03 3.03L16.744 24 31.23 38.485a2.143 2.143 0 0 1-3.03 3.03L10.684 24Z" />
+  </svg>
+)
 
 export function ContentRail({ row, savedIds, onToggleSave }: {
   row: ContentRow
@@ -96,14 +115,20 @@ function scroll(direction: number) {
             aria-label="Go to Full Schedule"
           >
             <span className="full-schedule-text">Go to Full Schedule</span>
-            <ArrowRight size={20} strokeWidth={2} />
+            <LeftArrowIcon />
           </a>
         )}
       </div>
-      {isFeatured && showArrows && <>
-        <button className="featured-rail-arrow is-previous" disabled={!canScrollLeft} aria-label={`Previous titles in ${row.title}`} data-position="back" onClick={() => scroll(-1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronLeft size={40} strokeWidth={1.8} /></button>
-        <button className="featured-rail-arrow is-next" disabled={!canScrollRight} aria-label={`More titles in ${row.title}`} data-position="forward" onClick={() => scroll(1)}><span className="featured-rail-arrow-protection" aria-hidden="true" /><ChevronRight size={40} strokeWidth={1.8} /></button>
-      </>}
+      {isFeatured && (
+        <>
+          {showArrows && (
+            <>
+              <button className="featured-rail-arrow is-previous" disabled={!canScrollLeft} aria-label={`Previous titles in ${row.title}`} data-position="back" onClick={() => scroll(-1)}><EpisodeRailArrowIcon direction="previous" /></button>
+              <button className="featured-rail-arrow is-next" disabled={!canScrollRight} aria-label={`More titles in ${row.title}`} data-position="forward" onClick={() => scroll(1)}><EpisodeRailArrowIcon direction="next" /></button>
+            </>
+          )}
+        </>
+      )}
     </section>
   )
 }

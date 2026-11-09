@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Bookmark, Check, Clapperboard, MoreVertical, Play } from 'lucide-react'
 import { KijkwijzerBadges } from './KijkwijzerBadge'
 import { fetchKijkwijzer } from '../../services/tmdb'
@@ -108,7 +109,8 @@ export function MediaCard({ item, saved, onToggleSave, showKijkwijzer = true, fe
 
   return (
     <article className={`content-card${featured ? ' featured-card' : ''}${isLiveUpcoming ? ' live-upcoming-card' : ''}${isContinueWatching ? ' continue-watching-card' : ''}`}>
-      <div className="poster-frame" ref={posterFrame}>
+      <Link to={item.media_type === 'tv' ? `/show/${item.uuid}` : `/movie/${item.uuid}`} className="poster-link" aria-label={getTitle(item)}>
+        <div className="poster-frame" ref={posterFrame}>
         {/* Continue Watching: Use 16:9 backdrop/banner image with title artwork on left */}
         {isContinueWatching && item.backdrop_path ? (
           <div className="continue-watching-banner" style={{ backgroundImage: `url(${getPoster(item.backdrop_path)})` }}>
@@ -160,13 +162,14 @@ export function MediaCard({ item, saved, onToggleSave, showKijkwijzer = true, fe
         )}
         
         {featured ? <>
-          <button className="featured-menu-toggle" aria-label={`More options for ${getTitle(item)}`} aria-expanded={menuOpen} aria-haspopup="menu" aria-controls={menuId} onClick={() => setMenuOpen((open) => !open)}><MoreVertical size={24} fill="currentColor" /></button>
-          {menuOpen && <div className="featured-card-menu" id={menuId} role="menu"><button type="button" role="menuitem" onClick={() => { onToggleSave(item); setMenuOpen(false) }}>{saved ? 'Remove from My Stuff' : 'Add to My Stuff'}</button></div>}
-        </> : <button className={`save-button${saved ? ' is-saved' : ''}`} onClick={() => onToggleSave(item)} aria-label={saved ? `Remove ${getTitle(item)} from My Stuff` : `Add ${getTitle(item)} to My Stuff`} title={saved ? 'Remove from My Stuff' : 'Add to My Stuff'}>
+          <button className="featured-menu-toggle" aria-label={`More options for ${getTitle(item)}`} aria-expanded={menuOpen} aria-haspopup="menu" aria-controls={menuId} onClick={(e) => { e.stopPropagation(); setMenuOpen((open) => !open); }}><MoreVertical size={24} fill="currentColor" /></button>
+          {menuOpen && <div className="featured-card-menu" id={menuId} role="menu"><button type="button" role="menuitem" onClick={(e) => { e.stopPropagation(); onToggleSave(item); setMenuOpen(false); }}>{saved ? 'Remove from My Stuff' : 'Add to My Stuff'}</button></div>}
+        </> : <button className={`save-button${saved ? ' is-saved' : ''}`} onClick={(e) => { e.stopPropagation(); onToggleSave(item); }} aria-label={saved ? `Remove ${getTitle(item)} from My Stuff` : `Add ${getTitle(item)} to My Stuff`} title={saved ? 'Remove from My Stuff' : 'Add to My Stuff'}>
           {saved ? <Check size={16} /> : <Bookmark size={16} />}
         </button>}
         {!featured && !isLiveUpcoming && !isContinueWatching && <div className="poster-play" aria-hidden="true"><Play size={18} fill="currentColor" /></div>}
       </div>
+      </Link>
       
       {/* Live & Upcoming: Sport type, Title, and Secondary Title below poster (like HBO Max) */}
       {isLiveUpcoming && (

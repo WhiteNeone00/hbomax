@@ -159,6 +159,7 @@
 @media (max-width: 768px) { .hero-previous, .hero-next { width: 48px; } .hero-arrow-icon { width: 24px; height: 24px; } }
 @media (max-width: 640px) { .hero-previous, .hero-next { width: 44px; } .hero-arrow-icon { width: 22px; height: 22px; } }
 @media (max-width: 375px) { .hero-previous, .hero-next { width: 40px; } .hero-arrow-icon { width: 20px; height: 20px; } }
+
 .content-wrap { max-width: 1560px; margin: 0 auto; padding: 0 var(--content-gutter); }
 
 /* Featured rails (trending, recommended, live-upcoming, continue-watching, villains, trending-series, comic-books, family, hbo-highlights) align with navbar left edge (hamburger menu) and extend to right edge */
@@ -203,18 +204,22 @@
 .content-rail.is-live-upcoming-rail { grid-auto-columns: 258px; }
 .content-rail.is-continue-watching-rail { grid-auto-columns: 325px; }
 .featured-rail-section { position: relative; padding-top: 3px; }
-.featured-rail-arrow { width: 48px; position: absolute; z-index: 5; top: 48px; bottom: 12px; display: grid; place-items: center; overflow: hidden; padding: 0; border: 0; color: rgba(255,255,255,.58); background: transparent; opacity: 0; cursor: pointer; transition: opacity .2s ease, color .2s ease; }
-.featured-rail-section:hover .featured-rail-arrow, .featured-rail-arrow:focus-visible { opacity: 1; }
-.featured-rail-section:hover .featured-rail-arrow:disabled { opacity: 0; pointer-events: none; }
-.featured-rail-arrow:focus-visible { color: #fff; }
-.featured-rail-arrow:not(:disabled):hover { color: #fff; }
-.featured-rail-arrow:disabled { display: none; pointer-events: none; }
-.featured-rail-arrow.is-previous { left: 0; }
-.featured-rail-arrow.is-next { right: 0; }
-.featured-rail-arrow-protection { position: absolute; inset: 0; pointer-events: none; }
-.featured-rail-arrow.is-previous .featured-rail-arrow-protection { background: linear-gradient(90deg, rgba(0,0,0,.72), transparent); }
-.featured-rail-arrow.is-next .featured-rail-arrow-protection { background: linear-gradient(270deg, rgba(0,0,0,.72), transparent); }
-.featured-rail-arrow svg { position: relative; z-index: 1; filter: drop-shadow(0 1px 6px rgba(0,0,0,.7)); }
+
+/* Episode Rail Navigation Arrows - Hero style but smaller (used for all featured rails) */
+.featured-rail-arrow { width: 44px; position: absolute; z-index: 5; top: 0; bottom: 0; display: grid; place-items: center; overflow: hidden; padding: 0; border: 0; color: #fff; background: transparent; opacity: 0; cursor: pointer; transition: opacity .2s ease; }
+.featured-rail-section:hover .featured-rail-arrow:not(:disabled), .featured-rail-arrow:focus-visible { opacity: 1; }
+.featured-rail-arrow:disabled { display: none; }
+.featured-rail-arrow.is-previous { left: 11px; right: auto; background: linear-gradient(90deg, rgba(0,0,0,.6), transparent); }
+.featured-rail-arrow.is-next { right: 17px; left: auto; background: linear-gradient(270deg, rgba(0,0,0,.6), transparent); }
+.featured-rail-arrow .episode-rail-arrow-icon { position: relative; z-index: 1; filter: drop-shadow(0 1px 6px rgba(0,0,0,.7)); width: 21px; height: 21px; }
+.featured-rail-arrow .episode-rail-arrow-icon.is-next { transform: rotate(180deg); }
+.featured-rail-arrow .episode-rail-arrow-outline { opacity: .75; }
+.featured-rail-arrow .episode-rail-arrow-solid { opacity: .95; }
+@media (max-width: 1280px) { .featured-rail-arrow { width: 40px; } .featured-rail-arrow .episode-rail-arrow-icon { width: 21px; height: 21px; } }
+@media (max-width: 1024px) { .featured-rail-arrow { width: 36px; } .featured-rail-arrow .episode-rail-arrow-icon { width: 19px; height: 19px; } }
+@media (max-width: 768px) { .featured-rail-arrow { width: 32px; } .featured-rail-arrow .episode-rail-arrow-icon { width: 17px; height: 17px; } }
+@media (max-width: 640px) { .featured-rail-arrow { width: 28px; } .featured-rail-arrow .episode-rail-arrow-icon { width: 15px; height: 15px; } }
+@media (max-width: 375px) { .featured-rail-arrow { width: 24px; } .featured-rail-arrow .episode-rail-arrow-icon { width: 14px; height: 14px; } }
 .content-rail::-webkit-scrollbar { display: none; }
 
 /* Go to Full Schedule link */
@@ -383,6 +388,9 @@
 .poster-frame { aspect-ratio: 179 / 268; position: relative; overflow: hidden; background: #181c21; }
 .poster-frame::after { content: ''; position: absolute; inset: 50% 0 0; opacity: 0; background: linear-gradient(0deg, rgba(0,0,0,.48), transparent); transition: opacity .2s; pointer-events: none; }
 .poster-frame img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
+
+.poster-link { display: block; text-decoration: none; color: inherit; }
+.poster-link:focus-visible .poster-frame { outline: 2px solid #fff; outline-offset: -2px; }
 .content-badge { min-height: 29px; position: absolute; z-index: 2; top: 0; left: 0; display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 0 0 3px 0; color: #111; background: #fff; font-size: 13px; font-weight: 800; line-height: 1.2; }
 .content-card:hover .poster-frame img { transform: scale(1.045); }
 .content-card:hover .poster-frame::after { opacity: 1; }
@@ -544,7 +552,7 @@
   .hero-content { width: 100%; left: 0; bottom: 28px; display: flex; align-items: center; flex-direction: column; text-align: center; }
   .hero-title-area { width: 100%; justify-content: center; }
   .hero-title-logo { width: min(390px, 90vw); max-height: 120px; object-position: center bottom; }
-  .hero-details { justify_content: center; flex-wrap: wrap; }
+  .hero-details { justify-content: center; flex-wrap: wrap; }
   .hero-description-slot { width: min(538px, calc(100vw - 40px)); }
   .hero-description { text-align: left; }
   .hero-actions { justify-content: center; }

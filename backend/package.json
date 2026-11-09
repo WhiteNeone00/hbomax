@@ -9,10 +9,12 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.7",
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/node": "^22.15.30",
     "tsx": "^4.19.2",

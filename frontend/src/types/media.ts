@@ -1,5 +1,6 @@
 export type MediaItem = {
   id: number
+  uuid: string
   title?: string
   name?: string
   overview?: string

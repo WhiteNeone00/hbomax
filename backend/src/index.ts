@@ -1,10 +1,17 @@
 import 'dotenv/config'
 import express from 'express'
+import cors from 'cors'
 import { load } from 'cheerio'
 import { verifiedKijkwijzerRecords } from './kijkwijzer-cache.js'
 
 const app = express()
 const port = Number(process.env.PORT ?? 3002)
+
+// Enable CORS for all routes
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174'],
+  credentials: true
+}))
 const tmdbToken = process.env.TMDB_API_READ_ACCESS_TOKEN
 const verifiedSeasonAirDates: Record<number, Record<number, string>> = {
   96677: { 3: '2023-10-05' },
@@ -51,6 +58,7 @@ type TheSportsDBResponse = {
 
 type TmdbItem = {
   id: number
+  uuid?: string
   title?: string
   name?: string
   overview?: string
@@ -83,17 +91,20 @@ type TmdbItem = {
   original_name?: string
 }
 
-type TmdbList = { results: TmdbItem[] }
-type TmdbLogo = { file_path: string; iso_639_1: string | null; vote_average: number }
 type TmdbDetails = TmdbItem & {
   images?: { logos: TmdbLogo[] }
   content_ratings?: { results: Array<{ iso_3166_1: string; rating: string; descriptors?: string[] }> }
   release_dates?: { results: Array<{ iso_3166_1: string; release_dates: Array<{ certification: string }> }> }
   last_episode_to_air?: { season_number: number; episode_number: number }
   seasons?: Array<{ season_number: number; episode_count: number; air_date?: string }>
-  next_episode_to_air?: { air_date?: string; season_number: number; episode_number: number } | null
+  videos?: { results: Array<{ site: string; type: string; key: string }> }
+  external_ids?: { imdb_id?: string; facebook_id?: string; instagram_id?: string; twitter_id?: string }
+  credits?: { cast: Array<{ id: number; name: string; character: string; profile_path?: string }>; crew: Array<{ id: number; name: string; job: string }> }
   keywords?: { results: Array<{ name: string }> }
 }
+
+type TmdbList = { results: TmdbItem[] }
+type TmdbLogo = { file_path: string; iso_639_1: string | null; vote_average: number }
 
 type KijkwijzerRating = {
   rating?: string
@@ -232,19 +243,23 @@ async function fetchSportsEventsFromTheSportsDB(): Promise<TmdbItem[]> {
   // Limit to 10 events
   const result = events.slice(0, 10)
   
+  // Add UUIDs to all events
+  const resultWithUUIDs = result.map(event => withVerifiedKijkwijzer(event, 'tv'))
+  
   // Cache the result for 24 hours
   sportsEventsCache.set(cacheKey, {
     expiresAt: now + SPORTS_CACHE_DURATION,
-    result
+    result: resultWithUUIDs
   })
   
-  return result
+  return resultWithUUIDs
 }
 
 function withVerifiedKijkwijzer(item: TmdbItem, mediaType: 'movie' | 'tv'): TmdbItem {
   const record = verifiedKijkwijzerRecords[item.id]
   return {
     ...item,
+    uuid: generateUUIDv2(mediaType, item.id),
     media_type: mediaType,
     content_rating: record?.rating,
     content_rating_descriptors: record?.descriptors ?? [],
@@ -265,6 +280,75 @@ function withRecentReleaseLabel(item: TmdbItem, mediaType: 'movie' | 'tv'): Tmdb
 
 function normalizeTitle(title: string) {
   return title.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+// Generate deterministic UUID based on TMDB ID and media type
+function generateUUID(mediaType: 'movie' | 'tv', tmdbId: number): string {
+  // Use a simple deterministic approach: create a UUID v5-like string from a namespace + mediaType + id
+  // This ensures the same TMDB ID always generates the same UUID
+  const namespace = mediaType === 'movie' ? 'movie-namespace-' : 'tv-namespace-'
+  const input = `${namespace}${tmdbId}`
+  
+  // Simple hash function to generate deterministic UUID-like string
+  let hash = 0
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  
+  // Convert to UUID format (8-4-4-4-12)
+  const hex = Math.abs(hash).toString(16).padStart(8, '0')
+  const part1 = hex.slice(0, 8)
+  const part2 = hex.slice(0, 4)
+  const part3 = hex.slice(4, 8)
+  const part4 = (Math.abs(hash * 31) % 0x10000).toString(16).padStart(4, '0')
+  const part5 = (Math.abs(hash * 17) % 0x100000000).toString(16).padStart(8, '0')
+  
+  return `${part1}-${part2}-${part3}-${part4}-${part5}`
+}
+
+// Parse UUID to extract media type and TMDB ID
+function parseUUID(uuid: string): { mediaType: 'movie' | 'tv'; tmdbId: number } | null {
+  // Since we can't easily reverse the hash, we'll need to store a mapping
+  // For now, we'll use a different approach: encode the media type and ID in the UUID
+  // Let's use a simpler approach: prefix with type indicator
+  return null
+}
+
+// Better approach: encode media type and TMDB ID directly in UUID
+function generateUUIDv2(mediaType: 'movie' | 'tv', tmdbId: number): string {
+  // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (UUID v4 format)
+  // We'll encode: first 8 chars = media type indicator + padded ID
+  // Next 4 chars = media type (0001 for movie, 0002 for tv)
+  // Rest = hash for uniqueness
+  
+  const typeCode = mediaType === 'movie' ? '0001' : '0002'
+  const idHex = tmdbId.toString(16).padStart(8, '0')
+  
+  // Create a deterministic "random" part based on the ID
+  const seed = tmdbId * (mediaType === 'movie' ? 12345 : 67890)
+  const randomPart = ((seed * 1103515245 + 12345) % 0x100000000).toString(16).padStart(8, '0')
+  const randomPart2 = ((seed * 1103515245 * 2 + 12345) % 0x100000000).toString(16).padStart(8, '0')
+  
+  return `${idHex}-${typeCode}-4${randomPart.slice(0,3)}-${randomPart.slice(3,7)}-${randomPart2}`
+}
+
+// Parse UUID v2 to extract media type and TMDB ID
+function parseUUIDv2(uuid: string): { mediaType: 'movie' | 'tv'; tmdbId: number } | null {
+  try {
+    const parts = uuid.split('-')
+    if (parts.length !== 5) return null
+    
+    const tmdbId = parseInt(parts[0], 16)
+    const typeCode = parts[1]
+    
+    if (typeCode === '0001') return { mediaType: 'movie', tmdbId }
+    if (typeCode === '0002') return { mediaType: 'tv', tmdbId }
+    return null
+  } catch {
+    return null
+  }
 }
 
 function parseKijkwijzerResult(html: string, title: string, year: number | undefined, mediaType: 'movie' | 'tv', acceptedTitles = [title]): KijkwijzerRating | null {
@@ -487,7 +571,7 @@ async function enrichFeatured(item: TmdbItem): Promise<TmdbItem> {
       if (daysSinceRelease >= 0 && daysSinceRelease <= 45) releaseLabel = 'Just Added'
     }
 
-    return {
+    return withVerifiedKijkwijzer({
       ...item,
       ...details,
       media_type: mediaType,
@@ -498,9 +582,9 @@ async function enrichFeatured(item: TmdbItem): Promise<TmdbItem> {
       content_rating_region: rating?.region,
       content_rating_original: rating?.originalRating,
       release_label: releaseLabel,
-    }
+    }, mediaType)
   } catch {
-    return { ...item, media_type: mediaType, logo_path: null }
+    return withVerifiedKijkwijzer({ ...item, media_type: mediaType, logo_path: null }, mediaType)
   }
 }
 
@@ -1050,7 +1134,7 @@ app.get('/api/home', async (request, response) => {
           const logo = details.images?.logos
             .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
             .sort((first, second) => second.vote_average - first.vote_average)[0]
-          return {
+          return withVerifiedKijkwijzer({
             ...details,
             media_type: 'tv' as const,
             logo_path: logo?.file_path ?? null,
@@ -1059,7 +1143,7 @@ app.get('/api/home', async (request, response) => {
             content_rating_source: rating?.source,
             content_rating_region: rating?.region,
             content_rating_original: rating?.originalRating,
-          }
+          }, 'tv')
         } catch {
           return null
         }
@@ -1142,7 +1226,7 @@ app.get('/api/home', async (request, response) => {
           const logo = details.images?.logos
             .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
             .sort((first, second) => second.vote_average - first.vote_average)[0]
-          return {
+          return withVerifiedKijkwijzer({
             ...details,
             media_type: 'tv' as const,
             logo_path: logo?.file_path ?? null,
@@ -1151,7 +1235,7 @@ app.get('/api/home', async (request, response) => {
             content_rating_source: rating?.source,
             content_rating_region: rating?.region,
             content_rating_original: rating?.originalRating,
-          }
+          }, 'tv')
         } catch {
           try {
             // Try movie
@@ -1161,7 +1245,7 @@ app.get('/api/home', async (request, response) => {
             const logo = details.images?.logos
               .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
               .sort((first, second) => second.vote_average - first.vote_average)[0]
-            return {
+            return withVerifiedKijkwijzer({
               ...details,
               media_type: 'movie' as const,
               logo_path: logo?.file_path ?? null,
@@ -1170,7 +1254,7 @@ app.get('/api/home', async (request, response) => {
               content_rating_source: rating?.source,
               content_rating_region: rating?.region,
               content_rating_original: rating?.originalRating,
-            }
+            }, 'movie')
           } catch {
             return null
           }
@@ -1225,7 +1309,7 @@ app.get('/api/home', async (request, response) => {
           const logo = details.images?.logos
             .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
             .sort((first, second) => second.vote_average - first.vote_average)[0]
-          return {
+          return withVerifiedKijkwijzer({
             ...details,
             media_type: 'tv' as const,
             logo_path: logo?.file_path ?? null,
@@ -1234,7 +1318,7 @@ app.get('/api/home', async (request, response) => {
             content_rating_source: rating?.source,
             content_rating_region: rating?.region,
             content_rating_original: rating?.originalRating,
-          }
+          }, 'tv')
         } catch {
           return null
         }
@@ -1299,7 +1383,7 @@ app.get('/api/home', async (request, response) => {
           const logo = details.images?.logos
             .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
             .sort((first, second) => second.vote_average - first.vote_average)[0]
-          return {
+          return withVerifiedKijkwijzer({
             ...details,
             media_type: 'tv' as const,
             logo_path: logo?.file_path ?? null,
@@ -1308,7 +1392,7 @@ app.get('/api/home', async (request, response) => {
             content_rating_source: rating?.source,
             content_rating_region: rating?.region,
             content_rating_original: rating?.originalRating,
-          }
+          }, 'tv')
         } catch {
           return null
         }
@@ -1409,6 +1493,239 @@ app.get('/api/search', async (request, response) => {
       .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
       .map((item) => withVerifiedKijkwijzer(item, item.media_type as 'movie' | 'tv'))
     response.json({ results })
+  } catch (error) {
+    handleApiError(error, response)
+  }
+})
+
+// UUID-based detail lookup endpoint
+app.get('/api/detail/uuid/:uuid', async (request, response) => {
+  const { uuid } = request.params
+  
+  const parsed = parseUUIDv2(uuid)
+  if (!parsed) {
+    response.status(400).json({ error: 'Invalid UUID format' })
+    return
+  }
+
+  const { mediaType, tmdbId } = parsed
+  
+  try {
+    const append = mediaType === 'tv' 
+      ? 'images,seasons,content_ratings,keywords,credits,videos,external_ids'
+      : 'images,release_dates,keywords,credits,videos,external_ids'
+    
+    const details = await tmdb<TmdbDetails>(`${mediaType}/${tmdbId}?append_to_response=${append}&include_image_language=en,nl,null`)
+    
+    // Get Kijkwijzer rating
+    const kijkwijzer = await lookupKijkwijzer(details, mediaType)
+    const rating = kijkwijzer ?? tmdbCertification(details, mediaType)
+    
+    // Get logo
+    const logo = details.images?.logos
+      .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+      .sort((first, second) => second.vote_average - first.vote_average)[0]
+    
+    // Get recommendations
+    const recommendations = await tmdb<TmdbList>(`${mediaType}/${tmdbId}/recommendations?language=en-US&page=1`)
+    const recommendedItems = recommendations.results
+      .filter((item) => item.media_type === mediaType || (item.title && mediaType === 'movie') || (item.name && mediaType === 'tv'))
+      .slice(0, 30)
+      .map((item) => withVerifiedKijkwijzer(item, mediaType))
+    
+    // For TV shows, get episodes for each season
+    let seasonsData: any[] = []
+    if (mediaType === 'tv' && details.seasons) {
+      for (const season of details.seasons) {
+        if (season.season_number > 0 && season.episode_count > 0) {
+          try {
+            const seasonDetails = await tmdb<any>(`tv/${tmdbId}/season/${season.season_number}?language=en-US`)
+            seasonsData.push({
+              season_number: season.season_number,
+              episode_count: season.episode_count,
+              air_date: season.air_date,
+              episodes: seasonDetails.episodes?.map((ep: any) => ({
+                episode_number: ep.episode_number,
+                name: ep.name,
+                overview: ep.overview,
+                still_path: ep.still_path,
+                air_date: ep.air_date,
+                runtime: ep.runtime,
+                vote_average: ep.vote_average,
+              })) || []
+            })
+          } catch {
+            // If season details fail, just use basic info
+            seasonsData.push({
+              season_number: season.season_number,
+              episode_count: season.episode_count,
+              air_date: season.air_date,
+              episodes: []
+            })
+          }
+        }
+      }
+    }
+    
+    // Get trailer/key videos
+    const videos = details.videos?.results?.filter((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')) || []
+    const trailer = videos[0]?.key
+    
+    // Get external IDs (IMDb, etc.)
+    const externalIds = details.external_ids || {}
+    
+    // Get cast
+    const cast = details.credits?.cast?.slice(0, 10).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      character: c.character,
+      profile_path: c.profile_path,
+    })) || []
+    
+    // Get crew (directors, creators)
+    const crew = details.credits?.crew?.filter((c: any) => 
+      mediaType === 'movie' ? c.job === 'Director' : (c.job === 'Creator' || c.job === 'Executive Producer')
+    ).slice(0, 5).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      job: c.job,
+    })) || []
+
+    const enrichedItem = {
+      ...details,
+      uuid: generateUUIDv2(mediaType, tmdbId),
+      media_type: mediaType,
+      logo_path: logo?.file_path ?? null,
+      content_rating: rating?.rating,
+      content_rating_descriptors: rating?.descriptors ?? [],
+      content_rating_source: rating?.source,
+      content_rating_region: rating?.region,
+      content_rating_original: rating?.originalRating,
+      seasons: seasonsData,
+      trailer_key: trailer,
+      external_ids: externalIds,
+      cast: cast,
+      crew: crew,
+      recommendations: recommendedItems,
+    }
+
+    response.json(enrichedItem)
+  } catch (error) {
+    handleApiError(error, response)
+  }
+})
+
+app.get('/api/detail/:mediaType/:id', async (request, response) => {
+  const { mediaType: mediaTypeParam, id } = request.params
+  const itemId = Number(id)
+  
+  if (!['movie', 'tv'].includes(mediaTypeParam)) {
+    response.status(400).json({ error: 'Invalid media type. Use "movie" or "tv".' })
+    return
+  }
+  
+  const mediaType = mediaTypeParam as 'movie' | 'tv'
+
+  try {
+    const append = mediaType === 'tv' 
+      ? 'images,seasons,content_ratings,keywords,credits,videos,external_ids'
+      : 'images,release_dates,keywords,credits,videos,external_ids'
+    
+    const details = await tmdb<TmdbDetails>(`${mediaType}/${itemId}?append_to_response=${append}&include_image_language=en,nl,null`)
+    
+    // Get Kijkwijzer rating
+    const kijkwijzer = await lookupKijkwijzer(details, mediaType)
+    const rating = kijkwijzer ?? tmdbCertification(details, mediaType)
+    
+    // Get logo
+    const logo = details.images?.logos
+      .filter((image) => image.iso_639_1 === 'en' || image.iso_639_1 === 'nl' || image.iso_639_1 === null)
+      .sort((first, second) => second.vote_average - first.vote_average)[0]
+    
+    // Get recommendations
+    const recommendations = await tmdb<TmdbList>(`${mediaType}/${itemId}/recommendations?language=en-US&page=1`)
+    const recommendedItems = recommendations.results
+      .filter((item) => item.media_type === mediaType || (item.title && mediaType === 'movie') || (item.name && mediaType === 'tv'))
+      .slice(0, 30)
+      .map((item) => withVerifiedKijkwijzer(item, mediaType))
+    
+    // For TV shows, get episodes for each season
+    let seasonsData: any[] = []
+    if (mediaType === 'tv' && details.seasons) {
+      for (const season of details.seasons) {
+        if (season.season_number > 0 && season.episode_count > 0) {
+          try {
+            const seasonDetails = await tmdb<any>(`tv/${itemId}/season/${season.season_number}?language=en-US`)
+            seasonsData.push({
+              season_number: season.season_number,
+              episode_count: season.episode_count,
+              air_date: season.air_date,
+              episodes: seasonDetails.episodes?.map((ep: any) => ({
+                episode_number: ep.episode_number,
+                name: ep.name,
+                overview: ep.overview,
+                still_path: ep.still_path,
+                air_date: ep.air_date,
+                runtime: ep.runtime,
+                vote_average: ep.vote_average,
+              })) || []
+            })
+          } catch {
+            // If season details fail, just use basic info
+            seasonsData.push({
+              season_number: season.season_number,
+              episode_count: season.episode_count,
+              air_date: season.air_date,
+              episodes: []
+            })
+          }
+        }
+      }
+    }
+    
+    // Get trailer/key videos
+    const videos = details.videos?.results?.filter((v: any) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser')) || []
+    const trailer = videos[0]?.key
+    
+    // Get external IDs (IMDb, etc.)
+    const externalIds = details.external_ids || {}
+    
+    // Get cast
+    const cast = details.credits?.cast?.slice(0, 10).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      character: c.character,
+      profile_path: c.profile_path,
+    })) || []
+    
+    // Get crew (directors, creators)
+    const crew = details.credits?.crew?.filter((c: any) => 
+      mediaType === 'movie' ? c.job === 'Director' : (c.job === 'Creator' || c.job === 'Executive Producer')
+    ).slice(0, 5).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      job: c.job,
+    })) || []
+
+    const enrichedItem = {
+      ...details,
+      uuid: generateUUIDv2(mediaType, itemId),
+      media_type: mediaType,
+      logo_path: logo?.file_path ?? null,
+      content_rating: rating?.rating,
+      content_rating_descriptors: rating?.descriptors ?? [],
+      content_rating_source: rating?.source,
+      content_rating_region: rating?.region,
+      content_rating_original: rating?.originalRating,
+      seasons: seasonsData,
+      trailer_key: trailer,
+      external_ids: externalIds,
+      cast: cast,
+      crew: crew,
+      recommendations: recommendedItems,
+    }
+
+    response.json(enrichedItem)
   } catch (error) {
     handleApiError(error, response)
   }
